@@ -3,7 +3,7 @@
 
 from common import tester_base, paral
 import node_config
-import time, sys, os, subprocess, threading, socket
+import time, sys, os, subprocess, threading, locale
 
 
 def buildTestApp():
@@ -114,6 +114,8 @@ def installPackages():
   
 
 def main():
+  locale.setlocale(locale.LC_ALL, "en_US.UTF-8")
+  
   for p in sys.argv[1:]:
     if p == "--deploy-test":
       node_config.deploy_test = True
