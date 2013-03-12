@@ -1,0 +1,46 @@
+{
+    "version": 2,
+    "paths": {
+        "plugins": "/usr/lib/cocaine",
+        "runtime": "<{SRV}>run/cocaine",
+        "spool": "<{SRV}>spool/cocaine"
+    },
+    "services": {
+        "logging": {
+            "type": "logging",
+            "args": {
+                "port": 12501
+            }
+        }
+    },
+    "storages": {
+        "core": {
+            "type": "elliptics",
+            "args": {
+                "nodes": {
+                        "<{NODE}>": 1025
+                },
+                "groups": [2],
+                "verbosity": 1
+            }
+        },
+        "cache": {
+            "type": "files",
+            "args": {
+                "path": "<{SRV}>cache/cocaine"
+            }
+        }
+    },
+    "loggers": {
+        "core": {
+            "type": "files",
+            "args": {
+                "path": "<{LOGS}>cocaine.log"
+            }
+        },
+        "tools": {
+            "type": "stdout"
+        }
+    }
+}
+
