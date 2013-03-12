@@ -7,7 +7,7 @@ if _script_dir_[-1] != "/":
   _script_dir_ += "/"
   
 # IP's of nodes
-nodes = []
+nodes = ["5.45.241.103"]
 
 # packages for installing on main node
 packages = [

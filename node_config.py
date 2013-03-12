@@ -14,12 +14,12 @@ packages = [
             ("elliptics-client", "2.21.4.3"),
             ("elliptics", "2.21.4.3"),
             ("elliptics-dev", "2.21.4.3"),
-            ("libcocaine-core2", None),
-            ("cocaine-worker-generic", None),
-            ("libcocaine-plugin-binary", None),
-            ("libcocaine-plugin-elliptics", None),
-            ("grape", None),
-            ("cocaine-tools", None)
+            ("libcocaine-core2", "0.10.0-rc4"),
+            ("cocaine-worker-generic", "0.10.0-rc3"),
+            ("libcocaine-plugin-binary", "0.10.0-rc2"),
+            ("libcocaine-plugin-elliptics", "0.10.0-rc2"),
+            ("grape", "0.5.3"),
+            ("cocaine-tools", "0.10.0-rc4")
             ]
 
 # build and upload test application

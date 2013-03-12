@@ -80,8 +80,6 @@ def uploadTesterToNodes():
 class NodeTester(paral.Process):
   def __init__(self, node, log_file, first_node = False):
     self.daemon_ready = threading.Lock()
-    self.test_finished = threading.Lock()
-    self.test_finished.acquire()
     self.log_file = log_file
     self.dublicate = first_node
     self.status = None
@@ -111,8 +109,6 @@ class NodeTester(paral.Process):
         elif line == "__msg__:node_tester:daemon_prepared\n":
           self.status = "ok"
           self.__daemonIsReady__()
-          self.test_finished.acquire()
-          tester_base.writeLine("__msg__:tester:tests_finished", f = self.process.stdin)
         else:
           if line[-1] == "\n":
             line = line[:-1]
@@ -120,7 +116,6 @@ class NodeTester(paral.Process):
           if self.dublicate:
             tester_base.log(line, "node: ")
     finally:
-      tester_base.writeLine("__msg__:tester:tests_finished", f = self.process.stdin)
       self.__daemonIsReady__()
   
   def __daemonIsReady__(self):
@@ -137,7 +132,7 @@ class NodeTester(paral.Process):
     self.daemon_ready.acquire()
   
   def testFinished(self):
-    self.test_finished.release()
+    tester_base.writeLine("__msg__:tester:tests_finished", f = self.process.stdin)
         
 
 def testDaemon():
