@@ -120,6 +120,7 @@ class NodeTester(paral.Process):
           if self.dublicate:
             tester_base.log(line, "node: ")
     finally:
+      tester_base.writeLine("__msg__:tester:tests_finished", f = self.process.stdin)
       self.__daemonIsReady__()
   
   def __daemonIsReady__(self):
