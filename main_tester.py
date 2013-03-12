@@ -4,7 +4,7 @@
 from common import tester_base, installer, paral
 from main_node import preprocessor, ssh_operations
 import main_config, node_config
-import os, sys, shutil, threading, subprocess, time, locale
+import os, sys, shutil, threading, subprocess, time
 
 def ensureDir(fname):
   dname = os.path.dirname(fname)
@@ -230,7 +230,7 @@ def processArgs():
           exit()
 
 def main():
-  locale.setlocale(locale.LC_ALL, "en_US.UTF-8")
+  os.putenv("LC_ALL", "C.UTF-8")
   
   processArgs()
   

@@ -113,9 +113,7 @@ def installPackages():
   tester_base.execCommand(["sudo", node_config.working_dir + "common/installer.py"] + args)
   
 
-def main():
-  locale.setlocale(locale.LC_ALL, "en_US.UTF-8")
-  
+def main():  
   for p in sys.argv[1:]:
     if p == "--deploy-test":
       node_config.deploy_test = True
