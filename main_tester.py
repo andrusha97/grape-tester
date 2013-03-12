@@ -55,9 +55,9 @@ def prepareFilesForNodes():
     preprocessor.processFile(main_config.test_manifest, manifest, subst)
     preprocessor.processFile(main_config.test_profile, profile, subst)
     
-    shutil.copytree("common/", for_deploy + "common/")
-    shutil.copy("node_config.py", for_deploy)
-    shutil.copy("node_tester.py", for_deploy)
+    shutil.copytree(tester_base.script_dir + "common/", for_deploy + "common/")
+    shutil.copy(tester_base.script_dir + "node_config.py", for_deploy)
+    shutil.copy(tester_base.script_dir + "node_tester.py", for_deploy)
     
     tester_base.log("Node tester has been written to " + for_deploy, log_prefix)
 
@@ -209,9 +209,29 @@ def installPackages():
     else:
       args.append(p + "=" + v)
   
-  tester_base.execCommand(["sudo", "./common/installer.py"] + args)
+  tester_base.execCommand(["sudo", tester_base.script_dir + "common/installer.py"] + args)
+
+def processArgs():
+  if len(sys.argv) > 1:
+    if sys.argv[1] == "--help":
+      print "Usage: main_tester.py [options]"
+      print "       main_tester.py --help"
+      print "Supported options:"
+      print "\t-k or --key <key_file> - file with private key for access to nodes over ssh"
+      exit()
+    else:
+      arg_index = 1
+      while arg_index < len(sys.argv):
+        if sys.argv[arg_index] == "--key" or sys.argv[arg_index] == "-k":
+          main_config.ssh_key = sys.argv[arg_index + 1]
+          arg_index += 2
+        else:
+          print "Unknown option: " + sys.argv[arg_index] + ". Try 'main_tester.py --help'."
+          exit()
 
 def main():
+  processArgs()
+  
   # duplicate stdout and stderr to log
   tee = subprocess.Popen(["tee", main_config.log_file], stdin=subprocess.PIPE)
   sys.stdout = tee.stdin

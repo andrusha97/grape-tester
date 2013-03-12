@@ -1,6 +1,10 @@
 # encoding: utf-8
 
-import subprocess, sys
+import subprocess, sys, os
+
+script_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
+if script_dir[-1] != "/":
+  script_dir += "/"
 
 class TesterException(Exception): pass
 class ExecException(TesterException): pass
