@@ -19,7 +19,9 @@ packages = [
             ("libcocaine-plugin-binary", "0.10.0-rc2"),
             ("libcocaine-plugin-elliptics", "0.10.0-rc2"),
             ("grape", "0.5.3"),
-            ("cocaine-tools", "0.10.0-rc4")
+            ("cocaine-tools", "0.10.0-rc4"),
+            ("libzmq3", "3.2.4+yandex1"),
+            ("libboost-all-dev", "1.48.0.2")
             ]
 
 # build and upload test application

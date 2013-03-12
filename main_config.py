@@ -7,7 +7,7 @@ if _script_dir_[-1] != "/":
   _script_dir_ += "/"
   
 # IP's of nodes
-nodes = ["5.45.241.103"]
+nodes = []
 
 # packages for installing on main node
 packages = [
@@ -23,9 +23,10 @@ nodes_dir = "nodes/"
 # user on nodes
 ssh_user = "bugsbunny"
 
-# key for access to nodes
+# file with key for access to nodes
 # may be overridden with --key parameter
-ssh_key = _script_dir_ + "key.rsa"
+# if None then key will not be used
+ssh_key = None
 
 elliptics_conf = _script_dir_ + "templates/elliptics.conf.tmpl"
 cocaine_conf = _script_dir_ + "templates/cocaine.conf.tmpl"
