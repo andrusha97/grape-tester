@@ -3,7 +3,7 @@
 
 from common import tester_base, paral
 import node_config
-import time, sys, os, subprocess, threading, optparse, signal
+import time, random, sys, os, subprocess, threading, optparse, signal
 
 
 def buildTestApp():
@@ -54,6 +54,9 @@ SUCCESSFUL_TEST = 2
 def runElliptics(lock, process, result):
   log_prefix = "runElliptics: "
 
+  # wait random time before starting because it's better if daemons will start in different moments
+  time.sleep(random.randint(0, 10))
+  
   tester_base.log("Starting elliptics daemon...", log_prefix)
   process.start()
   process.wait()
@@ -68,8 +71,8 @@ def testElliptics(lock, process, result):
   log_prefix = "testElliptics: "
   
   try:
-    tester_base.log("Waiting 10 seconds for starting of daemon...", log_prefix)
-    time.sleep(10)
+    tester_base.log("Waiting 5 seconds for starting of daemon...", log_prefix)
+    time.sleep(5)
     
     if process.poll() is not None:
       return

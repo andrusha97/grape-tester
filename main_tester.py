@@ -173,8 +173,8 @@ def testDaemon():
                   start_status != "ok", enumerate(daemons))
     
     if len(fail) == 0:
-      tester_base.log("Waiting 20 seconds after starting of daemons...", log_prefix)
-      time.sleep(20)
+      tester_base.log("Waiting 5 seconds after starting of daemons...", log_prefix)
+      time.sleep(5)
       
       daemons[0].allDaemonsAreReady()
       daemons[0].waitForUpload()
