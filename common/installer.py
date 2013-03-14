@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # encoding: utf-8
 
-import sys, apt, tester_base
+import sys, apt, tester_base, argparse
 
 # packages is list of pairs (package: str, version: str)
 # if version is None then default candidate will be installed
@@ -27,17 +27,15 @@ def installPackages(packages):
       tester_base.error("Unable to commit changes", log_prefix)
   except KeyError as e:
     tester_base.error(repr(e), log_prefix)
-  except apt.cache.FetchFailedException as e:
-    tester_base.error(repr(e), log_prefix)
-  except apt.cache.LockFailedException as e:
-    tester_base.error(repr(e), log_prefix)
-  except apt.cache.FetchCancelledException as e:
-    tester_base.error(repr(e), log_prefix)
 
 if __name__ == '__main__':
   packages = []
-
-  for p in sys.argv[1:]:
+  
+  parser = argparse.ArgumentParser()
+  parser.add_argument("packages", nargs = "*", help = "packages to install")
+  args = parser.parse_args()
+  
+  for p in args.packages:
     parts = p.split('=')
     if len(parts) > 1:
       packages.append((parts[0], parts[1]))

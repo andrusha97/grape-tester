@@ -3,8 +3,6 @@
 import sys as _sys_, os as _os_
   
 _script_dir_ = _os_.path.abspath(_os_.path.dirname(_sys_.argv[0]))
-if _script_dir_[-1] != "/":
-  _script_dir_ += "/"
   
 # IP's of nodes
 nodes = []
@@ -28,8 +26,8 @@ ssh_user = "bugsbunny"
 # if None then key will not be used
 ssh_key = None
 
-elliptics_conf = _script_dir_ + "templates/elliptics.conf.tmpl"
-cocaine_conf = _script_dir_ + "templates/cocaine.conf.tmpl"
-test_manifest = _script_dir_ + "templates/manifest.json.tmpl"
-test_profile = _script_dir_ + "templates/profile.json.tmpl"
-test_cpp = _script_dir_ + "templates/test.cpp.tmpl"
+elliptics_conf = _os_.path.join(_script_dir_, "templates/elliptics.conf.tmpl")
+cocaine_conf = _os_.path.join(_script_dir_, "templates/cocaine.conf.tmpl")
+test_manifest = _os_.path.join(_script_dir_, "templates/manifest.json.tmpl")
+test_profile = _os_.path.join(_script_dir_, "templates/profile.json.tmpl")
+test_cpp = _os_.path.join(_script_dir_, "templates/test.cpp.tmpl")

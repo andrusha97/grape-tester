@@ -4,7 +4,7 @@
 from common import tester_base, installer, paral
 from main_node import preprocessor, ssh_operations
 import main_config, node_config
-import os, sys, shutil, threading, subprocess, time
+import os, sys, shutil, threading, subprocess, time, argparse
 
 def ensureDir(fname):
   dname = os.path.dirname(fname)
@@ -70,11 +70,11 @@ def uploadTesterToNodes():
                               "rm -rf " + "'" + node_config.working_dir + "'",
                               key = main_config.ssh_key)
     ssh_operations.copyToHost(main_config.ssh_user + "@" + node, 
-                              main_config.nodes_dir + str(num) + "/for_deploy/", 
+                              os.path.join(main_config.nodes_dir, str(num), "/for_deploy/"), 
                               node_config.working_dir,
                               key = main_config.ssh_key)
     ssh_operations.execOnHost(main_config.ssh_user + "@" + node, 
-                              "chmod +x " + "'" + node_config.working_dir + "common/installer.py" + "'",
+                              "chmod +x " + "'" + os.path.join(node_config.working_dir, "common/installer.py") + "'",
                               key = main_config.ssh_key)
 
 class NodeTester(paral.Process):
@@ -89,7 +89,8 @@ class NodeTester(paral.Process):
                            ["ssh"] +
                            ([] if main_config.ssh_key is None else ["-i", main_config.ssh_key]) +
                            [main_config.ssh_user + "@" + node,
-                            "python " + node_config.working_dir + "node_tester.py" +
+                            "python " +
+                            "'" + os.path.join(node_config.working_dir, "node_tester.py") + "'" +
                             (" --deploy-test" if first_node else "")],
                            stdin = subprocess.PIPE,
                            stdout = subprocess.PIPE,
@@ -140,7 +141,9 @@ def testDaemon():
   
   daemons = []
   for num, node in enumerate(main_config.nodes):
-    daemons.append(NodeTester(node, main_config.nodes_dir + str(num) + "/tester.log", first_node = (num == 0)))
+    daemons.append(NodeTester(node,
+                              os.path.join(main_config.nodes_dir, str(num), "tester.log"),
+                              first_node = (num == 0)))
   
   tester_base.log("Starting testers on nodes...", log_prefix)
   for d in daemons:
@@ -190,11 +193,11 @@ def downloadFilesFromNodes():
   
   for num, node in enumerate(main_config.nodes):
     ssh_operations.execOnHost(main_config.ssh_user + "@" + node, 
-                              "rm -rf " + "'" + node_config.working_dir + node_config.srv_dir + "'",
+                              "rm -rf " + "'" + os.path.join(node_config.working_dir, node_config.srv_dir) + "'",
                               key = main_config.ssh_key)
     ssh_operations.copyFromHost(main_config.ssh_user + "@" + node,
                                 node_config.working_dir,
-                                main_config.nodes_dir + str(num),
+                                os.path.join(main_config.nodes_dir, str(num)),
                                 key = main_config.ssh_key)
 
 def installPackages():
@@ -205,25 +208,16 @@ def installPackages():
     else:
       args.append(p + "=" + v)
   
-  tester_base.execCommand(["sudo", tester_base.script_dir + "common/installer.py"] + args)
+  tester_base.execCommand(["sudo", os.path.join(tester_base.script_dir, "common/installer.py")] + args)
 
 def processArgs():
-  if len(sys.argv) > 1:
-    if sys.argv[1] == "--help":
-      print "Usage: main_tester.py [options]"
-      print "       main_tester.py --help"
-      print "Supported options:"
-      print "\t-k or --key <key_file> - file with private key for access to nodes over ssh"
-      exit()
-    else:
-      arg_index = 1
-      while arg_index < len(sys.argv):
-        if sys.argv[arg_index] == "--key" or sys.argv[arg_index] == "-k":
-          main_config.ssh_key = sys.argv[arg_index + 1]
-          arg_index += 2
-        else:
-          print "Unknown option: " + sys.argv[arg_index] + ". Try 'main_tester.py --help'."
-          exit()
+  parser = argparse.ArgumentParser()
+  parser.add_argument("-k",
+                      "--key",
+                      default = main_config.ssh_key,
+                      help = "file with private key for access to nodes over ssh")
+  args = parser.parse_args()
+  main_config.ssh_key = args.key
 
 def main():
   os.putenv("LC_ALL", "C.UTF-8")

@@ -3,7 +3,7 @@
 
 from common import tester_base, paral
 import node_config
-import time, sys, os, subprocess, threading, locale
+import time, sys, os, subprocess, threading, argparse
 
 
 def buildTestApp():
@@ -48,9 +48,9 @@ def uploadTestApp():
   old_cwd = os.getcwd()
   os.chdir(node_config.build_dir)   
 
-  uploadApp(node_config.working_dir + node_config.cocaine_conf, node_config.manifest, 
+  uploadApp(os.path.join(node_config.working_dir, node_config.cocaine_conf), node_config.manifest, 
             node_config.profile, node_config.tar_name, "test-app")
-  uploadApp(node_config.working_dir + node_config.cocaine_conf, node_config.manifest,
+  uploadApp(os.path.join(node_config.working_dir, node_config.cocaine_conf), node_config.manifest,
             node_config.profile, node_config.tar_name, "test-app-second")
   
   os.chdir(old_cwd)
@@ -110,20 +110,28 @@ def installPackages():
     else:
       args.append(p + "=" + v)
   
-  tester_base.execCommand(["sudo", node_config.working_dir + "common/installer.py"] + args)
-  
+  tester_base.execCommand(["sudo", os.path.join(node_config.working_dir, "common/installer.py")] + args)
 
-def main():  
-  for p in sys.argv[1:]:
-    if p == "--deploy-test":
-      node_config.deploy_test = True
-    else:
-      parts = p.split('=')
-      if len(parts) > 1:
-        node_config.packages.append((parts[0], parts[1]))
-      else:
-        node_config.packages.append((parts[0], None))
+def processArgs():
+  parser = argparse.ArgumentParser()
+  parser.add_argument("packages", nargs = "*", help = "packages to install")
+  parser.add_argument("--deploy-test",
+                      action = "store_true",
+                      default = node_config.deploy_test,
+                      help = "build and deploy test application in elliptics")
+  args = parser.parse_args()
   
+  node_config.deploy_test = args.deploy_test
+  
+  for p in args.packages:
+    parts = p.split('=')
+    if len(parts) > 1:
+      node_config.packages.append((parts[0], parts[1]))
+    else:
+      node_config.packages.append((parts[0], None))
+
+def main():
+  processArgs()
   os.chdir(node_config.working_dir)
 
   installPackages()
