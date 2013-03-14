@@ -252,6 +252,10 @@ def main():
   
   processArgs()
   
+  if len(main_config.nodes) == 0:
+    tester_base.log("List of nodes in main_config.py is empty.")
+    return
+  
   # duplicate stdout and stderr to log
   tee = subprocess.Popen(["tee", main_config.log_file], stdin=subprocess.PIPE)
   sys.stdout = tee.stdin

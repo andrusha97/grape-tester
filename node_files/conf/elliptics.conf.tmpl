@@ -34,7 +34,7 @@ group = 2
 # If you put 'autodiscovery:address:port:family' where address:port:family is valid multicast address,
 # elliptics will broadcast information about itself and remote nodes with the same auth cookie will
 # receive this information and connect to given node. Multicast TTL equals to 3.
-remote = <{','.join([n + ":1025:2" for n in main_config.nodes])}>
+remote = <{' '.join([n + ":1025:2" for n in main_config.nodes])}>
 
 # local address to bind to
 # port 0 means random port
