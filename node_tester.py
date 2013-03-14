@@ -138,6 +138,8 @@ def main():
   if node_config.deploy_test:
     buildTestApp()
   
+  tester_base.execCommand(["killall", "dnet_ioserv"], raise_on_error = False)
+  
   # run elliptics and test it
   p = paral.Process(["dnet_ioserv", "-c", os.path.join(tester_base.files_on_node, node_config.elliptics_conf)])
   result = [None]
