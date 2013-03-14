@@ -207,7 +207,6 @@ def testDaemon():
   finally:
     tester_base.log("Stopping testers on nodes...", log_prefix)
     for d in daemons:
-      d.allDaemonsAreReady()
       d.testFinished()
     for d in daemons:
       d.thread.join()
