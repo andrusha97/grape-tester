@@ -68,8 +68,8 @@ def testElliptics(lock, process, result):
   log_prefix = "testElliptics: "
   
   try:
-    tester_base.log("Waiting 5 seconds for starting of daemon...", log_prefix)
-    time.sleep(5)
+    tester_base.log("Waiting 10 seconds for starting of daemon...", log_prefix)
+    time.sleep(10)
     
     if process.poll() is not None:
       return
