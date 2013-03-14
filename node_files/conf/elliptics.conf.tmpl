@@ -1,6 +1,6 @@
 # log file
 # set to 'syslog' without inverted commas if you want elliptics to log through syslog
-log = <{LOGS}>elliptics.log
+log = <{node_config.working_dir}>files/logs/elliptics.log
 
 # log level
 # DNET_LOG_DATA		= 0
@@ -34,14 +34,14 @@ group = 2
 # If you put 'autodiscovery:address:port:family' where address:port:family is valid multicast address,
 # elliptics will broadcast information about itself and remote nodes with the same auth cookie will
 # receive this information and connect to given node. Multicast TTL equals to 3.
-remote = <{NODES}>
+remote = <{','.join([n + ":1025:2" for n in main_config.nodes])}>
 
 # local address to bind to
 # port 0 means random port
 #
 # one can use reserved word 'hostname' instead of local address (like hostname:1025:2)
 # it will use hostname, the same as output of `hostname -f` command, as address
-addr = <{NODE}>:1025:2
+addr = <{node}>:1025:2
 
 # wait timeout specifies number of seconds to wait for command completion
 wait_timeout = 60
@@ -64,7 +64,7 @@ net_thread_num = 4
 # specifies history environment directory
 # it will host file with generated IDs
 # and server-side execution scripts
-history = <{HISTORY}>
+history = <{node_config.working_dir}>files/history
 
 # specifies whether to go into background
 daemon = 0
@@ -106,8 +106,8 @@ oplock_num = 10240
 # srw worker config
 # Elliptics uses cocaine engine (https://github.com/organizations/cocaine) for its server-side workers
 # srw_config should point to its configuration file, example config lives in tree in example/library_config.json file
-#srw_config = /home/bugsbunny/grape-tester/grape_conf/cocaine-runtime.conf
-srw_config = <{COCAINE_CONF}>
+srw_config = <{node_config.working_dir}>files/conf/cocaine.conf
+
 # In-memory cache support
 # This is maximum cache size. Cache is managed by LRU algorithm
 # Using different IO flags in read/write/remove commands one can use it
@@ -127,8 +127,8 @@ backend = leveldb
 # 0 means no sync, while 1 means sync on every write
 sync = 0
 
-root = <{LEVELDB}>
-log = <{LOGS}>leveldb.log
+root = <{node_config.working_dir}>files/leveldb
+log = <{node_config.working_dir}>files/logs/leveldb.log
 cache_size = 100000
 write_buffer_size = 100000
 block_size = 4096

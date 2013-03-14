@@ -9,10 +9,10 @@
 		"slave" : "/tmp/build/bin/cocaine-slave"
 	},
 	"args" : {
-		"name" : "<{TEST_SONAME}>",
+		"name" : "<{node_config.soname}>",
 		"config" : {
 	                "nodes" : {
-				"<{NODE}>": 1025
+				"<{node}>": 1025
                 	},
 	                "groups" : [1, 2],
 			"log-level" : 3,

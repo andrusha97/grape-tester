@@ -2,12 +2,6 @@
 
 # general parameters
 working_dir = "/home/bugsbunny/grape-tester-node/"
-elliptics_conf = "conf/elliptics.conf"
-cocaine_conf = "conf/cocaine.conf"
-logs_dir = "logs/"
-leveldb_dir = "leveldb/"
-history_dir = "history/"
-srv_dir = "srv/" # for run, spool, cache, etc
 
 packages = [
 #           ("package", "version" or None for default version)
@@ -24,14 +18,19 @@ packages = [
             ("libboost-all-dev", "1.48.0.2")
             ]
 
+# paths to configs in node_files/
+elliptics_conf = "conf/elliptics.conf"
+cocaine_conf = "conf/cocaine.conf"
+
 # build and upload test application
-deploy_test = False
+
+# path to directory with test application in node_files/
 build_dir = "test_app/"
-cpp_name = "test.cpp"
+
 soname = "libetest.so"
 tar_name = "etest.tar"
 manifest = "manifest.json"
-profile = "profile-single.json"
+profile = "profile.json"
 
 
 

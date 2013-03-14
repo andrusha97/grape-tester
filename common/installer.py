@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # encoding: utf-8
 
-import sys, apt, tester_base, argparse
+import sys, apt, tester_base, optparse
 
 # packages is list of pairs (package: str, version: str)
 # if version is None then default candidate will be installed
@@ -31,11 +31,10 @@ def installPackages(packages):
 if __name__ == '__main__':
   packages = []
   
-  parser = argparse.ArgumentParser()
-  parser.add_argument("packages", nargs = "*", help = "packages to install")
-  args = parser.parse_args()
+  parser = optparse.OptionParser(usage = "Usage: %prog [options] packages")
+  (options, args) = parser.parse_args()
   
-  for p in args.packages:
+  for p in args:
     parts = p.split('=')
     if len(parts) > 1:
       packages.append((parts[0], parts[1]))
