@@ -53,9 +53,6 @@ SUCCESSFUL_TEST = 2
 # if result[0] is None then function must write into result[0] self unique id
 def runElliptics(lock, process, result):
   log_prefix = "runElliptics: "
-
-  # wait random time before starting because it's better if daemons will start in different moments
-  time.sleep(random.randint(0, 10))
   
   tester_base.log("Starting elliptics daemon...", log_prefix)
   process.start()
@@ -147,6 +144,10 @@ def main():
   
   lock = threading.Lock()
   perf = paral.MultiTaskPerformer([runElliptics, testElliptics], (lock, p, result))
+
+  # wait random time before starting because it's better if daemons will start in different moments
+  time.sleep(random.randint(0, 10))
+  
   perf.start()
   perf.joinAll()
   p.wait()
