@@ -35,3 +35,8 @@ def execCommand(cmd, raise_on_error = True, **args):
           ExecException)
   else:
     return rcode
+
+def bindOutputToLog(log_file):
+  tee = subprocess.Popen(["tee", log_file], stdin=subprocess.PIPE)
+  os.dup2(tee.stdin.fileno(), sys.stdout.fileno())
+  os.dup2(tee.stdin.fileno(), sys.stderr.fileno())

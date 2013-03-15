@@ -4,11 +4,16 @@
 from common import tester_base, installer, paral
 import ssh
 import main_config, node_config
-import os, sys, shutil, threading, subprocess, time, optparse, re, socket
+import os, shutil, threading, subprocess, time, optparse, re, socket
 
 class NodeDealer:
   def __init__(self, node, first_node = False):
     self.node = node
+    
+    self.socket = None
+    self.reader = None
+    self.writer = None
+    self.connection_state = "not connected"
     
     if first_node:
       self.logger = threading.Thread(target = self.log)
@@ -33,10 +38,6 @@ class NodeDealer:
                                    stdin = open("/dev/null", "r"),
                                    stdout = open("/dev/null", "w"),
                                    stderr = open("/dev/null", 'w'))
-    
-    self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    self.reader = None
-    self.writer = None
   
   def log(self):    
     while True:
@@ -51,6 +52,10 @@ class NodeDealer:
     if self.logger is not None:
       self.logger.start()
     
+    self.connect_()
+  
+  def connect_(self):
+    self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     address = (self.node, node_config.port)
     
     tester_base.log("Connecting to node %s:%d..." % address, "NodeDealer: ")
@@ -58,28 +63,33 @@ class NodeDealer:
       try:
         self.socket.connect(address)
         break;
-      except socket.error as msg:
+      except socket.error:
         pass
-      
       time.sleep(3)
     else:
-      self.process.kill()
       tester_base.error("Can't establish connection to node %s:%d..." % address, "NodeDealer: ")
       
     self.reader = self.socket.makefile("r", bufsize = 0)
     self.writer = self.socket.makefile("w", bufsize = 0)
+    self.connection_state = "connected"
   
   def readLine(self):
-    line = self.reader.readline()
-    return line.rstrip("\n") if len(line) > 0 else None
+    if self.connection_state == "connected":
+      line = self.reader.readline()
+      return line.rstrip("\n") if len(line) > 0 else None
+    else:
+      return None
   
   def writeLine(self, line):
-    tester_base.writeLine(line, f = self.writer)
+    if self.connection_state == "connected":
+      tester_base.writeLine(line, f = self.writer)
   
   def finish(self):
-    self.writer.close()
-    self.reader.close()
-    self.socket.close()
+    if self.connection_state == "connected":
+      self.writer.close()
+      self.reader.close()
+      self.socket.close()
+      self.connection_state = "disconnected"
   
   def wait(self):
     if self.process.isStarted():
@@ -139,7 +149,6 @@ def testElliptics():
   finally:
     tester_base.log("Stopping testers on nodes...", log_prefix)
     for d in dealers:
-      d.writeLine("msg:tests_finished")
       d.finish()
     for d in dealers:
       d.wait()
@@ -232,6 +241,12 @@ def performTest():
   
   tester_base.log("Success!")
 
+def killOldTesters():
+  for node in main_config.nodes:
+    d = ssh.SSHDealer(main_config.ssh_user, node, main_config.ssh_key)
+    d.execute("killall node_tester.py", raise_on_error = False)
+    d.execute("killall dnet_ioserv", raise_on_error = False)
+
 def processArgs():
   parser = optparse.OptionParser()
   parser.add_option("-k",
@@ -251,22 +266,11 @@ def main():
   
   if len(main_config.nodes) == 0:
     tester_base.log("List of nodes in main_config.py is empty.")
-    return
-  
-  # duplicate stdout and stderr to log
-  tee = subprocess.Popen(["tee", main_config.log_file], stdin=subprocess.PIPE)
-  os.dup2(tee.stdin.fileno(), sys.stdout.fileno())
-  os.dup2(tee.stdin.fileno(), sys.stderr.fileno())
-#  sys.stdout = tee.stdin
-#  sys.stderr = tee.stdin
-  
-  if main_config.killold:
-    for node in main_config.nodes:
-      d = ssh.SSHDealer(main_config.ssh_user, node, main_config.ssh_key)
-      d.execute("killall node_tester.py", raise_on_error = False)
-      d.execute("killall dnet_ioserv", raise_on_error = False)
-  
-  performTest()
+  else:
+    tester_base.bindOutputToLog(main_config.log_file)
+    if main_config.killold:
+      killOldTesters()
+    performTest()
   
 ################################################################################
 if __name__ == "__main__":

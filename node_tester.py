@@ -3,7 +3,7 @@
 
 from common import tester_base, paral
 import node_config
-import time, random, sys, os, subprocess, threading, optparse, signal, socket
+import time, os, threading, optparse, signal, socket
 
 def buildTestApp():
   log_prefix = "buildTestApp: "
@@ -27,6 +27,27 @@ def uploadApp(cocaine_conf, manifest, profile, archive_file, app_name):
   tester_base.execCommand(["cocaine-tool", "-c", cocaine_conf, "-m", profile, 
                           "-n", app_name, "profile:upload"])
 
+def uploadTestApp():
+  old_cwd = os.getcwd()
+  os.chdir(os.path.join(tester_base.files_on_node, node_config.build_dir))
+
+  uploadApp(os.path.join(node_config.working_dir,
+                         tester_base.files_on_node,
+                         node_config.cocaine_conf),
+            node_config.manifest,
+            node_config.profile,
+            node_config.tar_name,
+            "test-app")
+  uploadApp(os.path.join(node_config.working_dir,
+                         tester_base.files_on_node,
+                         node_config.cocaine_conf),
+            node_config.manifest,
+            node_config.profile,
+            node_config.tar_name,
+            "test-app-second")
+  
+  os.chdir(old_cwd)
+
 class DaemonDealer:
   def __init__(self, messenger):
     self.reader = messenger.makefile("r", bufsize = 0)
@@ -47,9 +68,16 @@ class DaemonDealer:
   def performTest(self):
     self.tasks.start()
     self.tasks.joinAll()
-    self.process.wait()
     self.reader.close()
     self.writer.close()
+  
+  def isRunning(self):
+    return self.process.isStarted() and self.process.poll() is None
+  
+  def resultOfTask(self, val):
+    with self.lock:
+      if self.result[0] is None:
+        self.result[0] = val
   
   def monitorDaemon(self):
     log_prefix = "monitorDaemon: "
@@ -58,19 +86,17 @@ class DaemonDealer:
     self.process.start()
     self.process.wait()
     
-    with self.lock:
-      tester_base.log("Daemon stoped.", log_prefix)
-      if self.result[0] is None:
-        self.result[0] = self.DAEMON_FAILED
+    self.resultOfTask(self.DAEMON_FAILED)
+    tester_base.log("Daemon stoped.", log_prefix)
 
   def testElliptics(self):
     log_prefix = "testElliptics: "
     
     try:
-      tester_base.log("Waiting 5 seconds for starting of the daemon...", log_prefix)
-      time.sleep(5)
+      tester_base.log("Waiting 10 seconds for starting of the daemon...", log_prefix)
+      time.sleep(10)
       
-      if self.process.poll() is not None:
+      if not self.isRunning():
         return
       
       tester_base.log("Elliptics is ready.", log_prefix)
@@ -78,50 +104,30 @@ class DaemonDealer:
       tester_base.writeLine("msg:daemon_prepared", f = self.writer)
       
       # event loop
-      while self.process.poll() is None:
+      while self.isRunning():
         line = self.reader.readline()
         
         if line.rstrip("\n") == "msg:upload_app":
           buildTestApp()
           uploadTestApp()
           tester_base.writeLine("msg:application_uploaded", f = self.writer)
-          
-        elif len(line) == 0 or line.rstrip("\n") == "msg:tests_finished":
+        elif len(line) == 0:
           break
-        
       else:
         return
-    
-      with self.lock:
-        if self.process.poll() is None and self.result[0] is None:
-          self.result[0] = self.SUCCESSFUL_TEST
       
+      self.resultOfTask(self.SUCCESSFUL_TEST)
     finally:
-      if self.process.poll() is None:
+      if self.isRunning():
         tester_base.log("Killing the daemon...", log_prefix)
         self.process.kill()
 
-def uploadTestApp():
-  old_cwd = os.getcwd()
-  os.chdir(os.path.join(tester_base.files_on_node, node_config.build_dir))
-
-  uploadApp(os.path.join(node_config.working_dir, tester_base.files_on_node, node_config.cocaine_conf),
-            node_config.manifest,
-            node_config.profile,
-            node_config.tar_name,
-            "test-app")
-  uploadApp(os.path.join(node_config.working_dir, tester_base.files_on_node, node_config.cocaine_conf),
-            node_config.manifest,
-            node_config.profile,
-            node_config.tar_name,
-            "test-app-second")
-  
-  os.chdir(old_cwd)
-  
-def performTest(socket):
-  # install packages
+def installPackages():
   tester_base.execCommand(["sudo", os.path.join(node_config.working_dir, "common/installer.py")] +
                           [p if v is None else p + "=" + v for p, v in node_config.packages])
+
+def performTest(socket):
+  installPackages()
   
   tester = DaemonDealer(socket)
   tester.performTest()
@@ -133,39 +139,31 @@ def performTest(socket):
     tester_base.error("Unexpected result of testing. Something is wrong.")
 
 def processArgs():
-  parser = optparse.OptionParser(usage = "Usage: %prog [options] packages")
+  parser = optparse.OptionParser()
   parser.add_option("--deploy-test",
-                      action = "store_true",
-                      help = "build and deploy test application in elliptics")
+                    action = "store_true",
+                    help = "build and deploy test application in elliptics")
   (options, args) = parser.parse_args()
   
   node_config.deploy_test = options.deploy_test
-  
-  for p in args:
-    parts = p.split('=')
-    if len(parts) > 1:
-      node_config.packages.append((parts[0], parts[1]))
-    else:
-      node_config.packages.append((parts[0], None))
 
 def main():
   processArgs()
   os.chdir(node_config.working_dir)
-  
   signal.signal(signal.SIGINT, signal.SIG_IGN)
   
-  # duplicate stdout and stderr to log
-  tee = subprocess.Popen(["tee", "tester.log"], stdin=subprocess.PIPE)
-  os.dup2(tee.stdin.fileno(), sys.stdout.fileno())
-  os.dup2(tee.stdin.fileno(), sys.stderr.fileno())
+  tester_base.bindOutputToLog("tester.log")
   
+  # wait for connection from main node
   tester_base.log("Tester will be listening on " + str(node_config.port) + " port.")
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   s.bind(("", node_config.port))
+  s.listen(1)
   
   tester_base.log("Waiting for connection from main tester...")
-  s.listen(1)
+  s.settimeout(15)
   messenger, addr = s.accept()
+  messenger.settimeout(None)
   tester_base.log("Connection from " + str(addr) + " accepted.")
   
   try:
