@@ -2,9 +2,140 @@
 # encoding: utf-8
 
 from common import tester_base, installer, paral
-import ssh_operations
+import ssh
 import main_config, node_config
-import os, sys, shutil, threading, subprocess, time, optparse, re, signal
+import os, sys, shutil, threading, subprocess, time, optparse, re, signal, socket
+
+class NodeDealer:
+  def __init__(self, node, log_file, first_node = False):
+    self.node = node
+    self.log_file = log_file
+    self.dublicate = first_node
+    self.process = paral.Process(["ssh"] +
+                                 ([] if main_config.ssh_key is None else ["-i", main_config.ssh_key]) +
+                                 [main_config.ssh_user + "@" + node,
+                                  "'%s'%s" % (os.path.join(node_config.working_dir, "node_tester.py"),
+                                              " --deploy-test" if first_node else "")],
+                                 stdin = subprocess.PIPE,
+                                 stdout = subprocess.PIPE,
+                                 stderr = subprocess.STDOUT)
+    
+    self.logger = threading.Thread(target = self.log)
+    self.logger.daemon = True
+    
+    self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    self.reader = None
+    self.writer = None
+  
+  def log(self):
+    log = open(self.log_file, "w", buffering = 0)
+    
+    while True:
+      line = self.process.process.stdout.readline()
+      if len(line) > 0:
+        tester_base.writeLine(line.rstrip("\n"), f = log)
+        if self.dublicate:
+          tester_base.log(line.rstrip("\n"), "node: ")
+      else:
+        break;
+  
+  def start(self):
+    self.process.start()
+    self.logger.start()
+    
+    address = (self.node, node_config.port)
+    
+    tester_base.log("Connecting to node %s:%d..." % address, "NodeDealer: ")
+    for x in xrange(3):
+      try:
+        self.socket.connect(address)
+        break;
+      except socket.error as msg:
+        pass
+      
+      time.sleep(3)
+    else:
+      self.process.kill()
+      tester_base.error("Can't establish connection to node %s:%d..." % address, "NodeDealer: ")
+      
+    self.reader = self.socket.makefile("r", bufsize = 0)
+    self.writer = self.socket.makefile("w", bufsize = 0)
+  
+  def readLine(self):
+    line = self.reader.readline()
+    return line.rstrip("\n") if len(line) > 0 else None
+  
+  def writeLine(self, line):
+    tester_base.writeLine(line, f = self.writer)
+  
+  def finish(self):
+    self.socket.close()
+  
+  def wait(self):
+    if self.process.isStarted():
+      self.process.wait()
+    
+    self.logger.join()
+        
+def testApplication():
+  log_prefix = "testApplication: "
+  
+  tester_base.log("Launching test application...", log_prefix)
+  
+  tester_base.execCommand(("dnet_ioclient -r " + main_config.nodes[0] + ":1025:2 -g2 -c test-app@start-task").split())
+  tester_base.execCommand(("dnet_ioclient -r " + main_config.nodes[0] + ":1025:2 -g2 -c test-app-second@start-task").split())
+  
+  output = subprocess.check_output(("dnet_ioclient -r " + main_config.nodes[0] + ":1025:2 -g2 -c").split() + ["test-app@event0 xxx"])
+  
+  tester_base.execCommand(("dnet_ioclient -r " + main_config.nodes[0] + ":1025:2 -g2 -c test-app-second@stop-task").split())
+  tester_base.execCommand(("dnet_ioclient -r " + main_config.nodes[0] + ":1025:2 -g2 -c test-app@stop-task").split())
+  
+  if output != "xxx123test-app-second@event0|test-app-second@event1|test-app-second@event2|test-app-second@finish|":
+    tester_base.error("dnet_ioclient returned string '" + output + "'. Something is wrong.", log_prefix)
+  else:
+    tester_base.log("Test has been successfully completed.", log_prefix)
+
+def testElliptics():
+  log_prefix = "testElliptics: "
+  
+  dealers = [NodeDealer(node,
+                        os.path.join(main_config.nodes_dir, str(num), "tester.log"),
+                        first_node = (num == 0))
+             for num, node in enumerate(main_config.nodes)]
+  
+  try:
+    tester_base.log("Starting testers on nodes...", log_prefix)
+    for d in dealers:
+      d.start()
+      
+    tester_base.log("Waiting for testers on nodes...", log_prefix)
+    
+    fail = [n for n, d in enumerate(dealers) if d.readLine() != "msg:daemon_prepared"]
+    
+    if len(fail) == 0:
+      tester_base.log("Waiting 5 seconds after starting of daemons...", log_prefix)
+      time.sleep(5)
+      
+      dealers[0].writeLine("msg:upload_app")
+      
+      if dealers[0].readLine() != "msg:application_uploaded":
+        tester_base.error("Application has not been uploaded.", log_prefix)
+      
+      tester_base.log("Waiting 5 seconds after uploading of application...", log_prefix)
+      time.sleep(5)
+      
+      testApplication()
+        
+    else:
+      tester_base.error("Following node testers finished with error: " + ', '.join([str(n) for n in fail]), log_prefix)
+      
+  finally:
+    tester_base.log("Stopping testers on nodes...", log_prefix)
+    for d in dealers:
+      d.writeLine("msg:tests_finished")
+      d.finish()
+    for d in dealers:
+      d.wait()
 
 def listAllFiles(dir):
   for d in os.walk(dir):
@@ -35,9 +166,10 @@ def prepareFilesForNodes():
     shutil.copytree(main_config.node_files, os.path.join(for_deploy, tester_base.files_on_node))
     
     preprocessDirectory(os.path.join(for_deploy, tester_base.files_on_node),
-                        {"node_config": node_config,
-                         "main_config": main_config,
-                         "node": node
+                        {
+                          "node_config": node_config,
+                          "main_config": main_config,
+                          "node": node
                         })
     
     shutil.copytree(os.path.join(tester_base.script_dir, "common/"), os.path.join(for_deploy, "common/"))
@@ -47,204 +179,62 @@ def prepareFilesForNodes():
     tester_base.log("Node tester has been written to " + for_deploy, log_prefix)
 
 def uploadTesterToNodes():
-  log_prefix = "uploadTesterToNodes: "
-  tester_base.log("Uploading tester to nodes...", log_prefix)
+  tester_base.log("Uploading tester to nodes...", "uploadTesterToNodes: ")
   
   for num, node in enumerate(main_config.nodes):
-    ssh_operations.execOnHost(main_config.ssh_user + "@" + node, 
-                              "rm -rf " + "'" + node_config.working_dir + "'",
-                              key = main_config.ssh_key)
-    ssh_operations.copyToHost(main_config.ssh_user + "@" + node, 
-                              os.path.join(main_config.nodes_dir, str(num), "to_deploy/"), 
-                              node_config.working_dir,
-                              key = main_config.ssh_key)
-    ssh_operations.execOnHost(main_config.ssh_user + "@" + node, 
-                              "chmod +x " + "'" + os.path.join(node_config.working_dir, "common/installer.py") + "'",
-                              key = main_config.ssh_key)
-
-class NodeTester(paral.Process):
-  def __init__(self, node, log_file, first_node = False):
-    self.daemon_ready = threading.Lock()
-    self.app_uploaded = threading.Lock()
-    self.log_file = log_file
-    self.dublicate = first_node
-    self.start_status = None
-    self.upload_status = None
-    self.dr_locked = False
-    self.au_locked = False
+    dealer = ssh.SSHDealer(main_config.ssh_user, node, main_config.ssh_key)
     
-    paral.Process.__init__(self, 
-                           ["ssh"] +
-                           ([] if main_config.ssh_key is None else ["-i", main_config.ssh_key]) +
-                           [main_config.ssh_user + "@" + node,
-                            "python " +
-                            "'" + os.path.join(node_config.working_dir, "node_tester.py") + "'" +
-                            (" --deploy-test" if first_node else "")],
-                           stdin = subprocess.PIPE,
-                           stdout = subprocess.PIPE,
-                           stderr = subprocess.STDOUT)
-  
-  def monitor(self):
-    self.__acquireDRLock__()
-    self.__acquireAULock__()
-
-    try:
-      log = open(self.log_file, "w", buffering = 0)
-      
-      while True:
-        line = self.process.stdout.readline()
-        if len(line) == 0:
-          break
-        elif line == "__msg__:node_tester:daemon_prepared\n":
-          self.start_status = "ok"
-          self.__daemonIsReady__()
-        elif line == "__msg__:node_tester:application_uploaded\n":
-          self.upload_status = "ok"
-          self.__appUploaded__ ()
-        else:
-          if line[-1] == "\n":
-            line = line[:-1]
-          tester_base.writeLine(line, f = log)
-          if self.dublicate:
-            tester_base.log(line, "node: ")
-    finally:
-      self.__daemonIsReady__()
-      self.__appUploaded__()
-  
-  def __acquireDRLock__(self):
-    self.daemon_ready.acquire()
-    self.dr_locked = True
-  
-  def __acquireAULock__(self):
-    self.app_uploaded.acquire()
-    self.au_locked = True
-  
-  def __daemonIsReady__(self):
-    if self.dr_locked:
-      self.daemon_ready.release()
-      self.dr_locked = False
-  
-  def __appUploaded__(self):
-    if self.au_locked:
-      self.app_uploaded.release()
-      self.au_locked = False
-   
-  def start(self):
-    paral.Process.start(self)
-    self.thread = threading.Thread(target = self.monitor)
-    self.thread.start()
-  
-  def waitForStart(self):
-    self.daemon_ready.acquire()
-  
-  def waitForUpload(self):
-    self.app_uploaded.acquire()
-  
-  def testFinished(self):
-    if self.start_status == "ok":
-      tester_base.writeLine("__msg__:tester:tests_finished", f = self.process.stdin)
-  
-  def allDaemonsAreReady(self):
-    if self.start_status == "ok":
-      tester_base.writeLine("__msg__:tester:daemons_ready", f = self.process.stdin)
-        
-
-def testDaemon():
-  log_prefix = "testDaemon: "
-  
-  daemons = []
-  for num, node in enumerate(main_config.nodes):
-    daemons.append(NodeTester(node,
-                              os.path.join(main_config.nodes_dir, str(num), "tester.log"),
-                              first_node = (num == 0)))
-  
-  tester_base.log("Starting testers on nodes...", log_prefix)
-  for d in daemons:
-    d.start()
-  
-  try:
-    tester_base.log("Waiting for testers on nodes...", log_prefix)
-    
-    ok = True
-    for d in daemons:
-      d.waitForStart()
-      
-    fail = filter(lambda x: x[1].
-                  start_status != "ok", enumerate(daemons))
-    
-    if len(fail) == 0:
-      tester_base.log("Waiting 5 seconds after starting of daemons...", log_prefix)
-      time.sleep(5)
-      
-      daemons[0].allDaemonsAreReady()
-      daemons[0].waitForUpload()
-      
-      if daemons[0].upload_status != "ok":
-        tester_base.error("Application has not been uploaded.", log_prefix)
-      
-      tester_base.log("Waiting 5 seconds after uploading of application...", log_prefix)
-      time.sleep(5)
-      
-      tester_base.log("Elliptics is ready. Launching test application...", log_prefix)
-      
-      tester_base.execCommand(("dnet_ioclient -r " + main_config.nodes[0] + ":1025:2 -g2 -c test-app@start-task").split())
-      tester_base.execCommand(("dnet_ioclient -r " + main_config.nodes[0] + ":1025:2 -g2 -c test-app-second@start-task").split())
-      
-      output = subprocess.check_output(("dnet_ioclient -r " + main_config.nodes[0] + ":1025:2 -g2 -c").split() + ["test-app@event0 xxx"])
-      
-      tester_base.execCommand(("dnet_ioclient -r " + main_config.nodes[0] + ":1025:2 -g2 -c test-app-second@stop-task").split())
-      tester_base.execCommand(("dnet_ioclient -r " + main_config.nodes[0] + ":1025:2 -g2 -c test-app@stop-task").split())
-      
-      if output != \
-         'xxx123test-app-second@event0|test-app-second@event1|test-app-second@event2|test-app-second@finish|':
-        tester_base.error("dnet_ioclient returned string '" + output + "'. something is wrong.", log_prefix)
-      else:
-        tester_base.log("Test has been successfully completed.", log_prefix)
-        
-    else:
-      tester_base.error("Following node testers finished with error: " + ', '.join([str(n[0]) for n in fail]), log_prefix)
-      
-  finally:
-    tester_base.log("Stopping testers on nodes...", log_prefix)
-    for d in daemons:
-      d.testFinished()
-    for d in daemons:
-      d.thread.join()
+    dealer.execute("rm -rf " + "'" + node_config.working_dir + "'")
+    dealer.copyTo(os.path.join(main_config.nodes_dir, str(num), "to_deploy/"),
+                  node_config.working_dir)
+    dealer.execute("chmod +x '%s'" % os.path.join(node_config.working_dir, "common/installer.py"))
+    dealer.execute("chmod +x '%s'" % os.path.join(node_config.working_dir, "node_tester.py"))
 
 def downloadFilesFromNodes():
   log_prefix = "downloadFilesFromNodes: "
   tester_base.log("Downloading working directories (with logs, configs, etc) from nodes...", log_prefix)
-  #tester_base.log("You can find them in nodes/{0, 1, ...}/" + tester_base.files_on_node + ".", log_prefix)
   
   for num, node in enumerate(main_config.nodes):
-    for f in main_config.remove_before_downloading:
-      ssh_operations.execOnHost(main_config.ssh_user + "@" + node, 
-                                "rm -rf " + "'" + os.path.join(node_config.working_dir, f) + "'",
-                                key = main_config.ssh_key)
+    dealer = ssh.SSHDealer(main_config.ssh_user, node, main_config.ssh_key)
     
-    ssh_operations.copyFromHost(main_config.ssh_user + "@" + node,
-                                os.path.join(node_config.working_dir, tester_base.files_on_node),
-                                os.path.join(main_config.nodes_dir, str(num)),
-                                key = main_config.ssh_key)
+    for f in main_config.remove_before_downloading:
+      dealer.execute("rm -rf '%s'" % os.path.join(node_config.working_dir, f))
+    
+    dealer.copyFrom(os.path.join(node_config.working_dir, tester_base.files_on_node),
+                    os.path.join(main_config.nodes_dir, str(num)))
 
 def installPackages():
-  args = []
-  for p, v in main_config.packages:
-    if v is None:
-      args.append(p)
-    else:
-      args.append(p + "=" + v)
+  tester_base.execCommand(["sudo", os.path.join(tester_base.script_dir, "common/installer.py")] +
+                          [p if v is None else p + "=" + v for p, v in main_config.packages])
+
+def performTest():
+  installPackages()
+  prepareFilesForNodes()
+  uploadTesterToNodes()
+  try:
+    testElliptics()
+  finally:
+    downloadFilesFromNodes()
+    tester_base.log("You can find files from nodes in '" +
+                    os.path.join(main_config.nodes_dir, "{0, 1, ...}", tester_base.files_on_node) + "', " +
+                    "logs of node testers in '" +
+                    os.path.join(main_config.nodes_dir, "{0, 1, ...}", "tester.log") + "', " +
+                    "log of this script in '" + main_config.log_file + "'.")
   
-  tester_base.execCommand(["sudo", os.path.join(tester_base.script_dir, "common/installer.py")] + args)
+  tester_base.log("Success!")
 
 def processArgs():
   parser = optparse.OptionParser()
   parser.add_option("-k",
-                      "--key",
-                      default = main_config.ssh_key,
-                      help = "file with private key for access to nodes over ssh")
+                    "--key",
+                    default = main_config.ssh_key,
+                    help = "file with private key for access to nodes over ssh")
+  parser.add_option("--kill-old",
+                    action = "store_true",
+                    help = "kill old copies of elliptics and node_tester.py on nodes")
   (options, args) = parser.parse_args()
   main_config.ssh_key = options.key
+  main_config.killold = options.kill_old
 
 def main():
   os.putenv("LC_ALL", "C.UTF-8")
@@ -261,21 +251,15 @@ def main():
   sys.stdout = tee.stdin
   sys.stderr = tee.stdin
   
-  installPackages()
-  prepareFilesForNodes()
-  uploadTesterToNodes()
-  try:
-    testDaemon()
-  finally:
-    downloadFilesFromNodes()
-    tester_base.log("You can find files from nodes in '" +
-                    os.path.join(main_config.nodes_dir, "{0, 1, ...}", tester_base.files_on_node) + "', " +
-                    "logs of node testers in '" +
-                    os.path.join(main_config.nodes_dir, "{0, 1, ...}", "tester.log") + "', " +
-                    "log of this script in '" + main_config.log_file + "'.")
+  if main_config.killold:
+    for node in main_config.nodes:
+      d = ssh.SSHDealer(main_config.ssh_user, node, main_config.ssh_key)
+      d.execute("killall node_tester.py", raise_on_error = False)
+      d.execute("killall dnet_ioserv", raise_on_error = False)
   
-  tester_base.log("Success!")
-
+  performTest()
+  
+################################################################################
 if __name__ == "__main__":
   main()
   

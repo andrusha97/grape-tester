@@ -22,8 +22,6 @@ packages = [
 elliptics_conf = "conf/elliptics.conf"
 cocaine_conf = "conf/cocaine.conf"
 
-# build and upload test application
-
 # path to directory with test application in node_files/
 build_dir = "test_app/"
 
@@ -31,6 +29,9 @@ soname = "libetest.so"
 tar_name = "etest.tar"
 manifest = "manifest.json"
 profile = "profile.json"
+
+# port through which node tester will communicate with main tester
+port = 31337
 
 
 

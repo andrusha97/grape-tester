@@ -4,7 +4,7 @@ import sys as _sys_, os as _os_
 _script_dir_ = _os_.path.abspath(_os_.path.dirname(_sys_.argv[0]))
   
 # IP's of nodes
-nodes = []
+nodes = ["5.45.241.103"]
 
 # packages for installing on main node
 packages = [

@@ -3,7 +3,7 @@
 import subprocess, threading
 
 class MultiTaskPerformer:
-  def __init__(self, tasks, args):
+  def __init__(self, tasks, args = ()):
     self.threads = [threading.Thread(target = t, args = args)
                     for t in tasks]
                       

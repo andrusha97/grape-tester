@@ -3,8 +3,7 @@
 
 from common import tester_base, paral
 import node_config
-import time, random, sys, os, subprocess, threading, optparse, signal
-
+import time, random, sys, os, subprocess, threading, optparse, signal, socket
 
 def buildTestApp():
   log_prefix = "buildTestApp: "
@@ -18,7 +17,6 @@ def buildTestApp():
 
   os.chdir(old_cwd)
 
-
 def uploadApp(cocaine_conf, manifest, profile, archive_file, app_name):
   log_prefix = "uploadApp: "
 
@@ -28,6 +26,79 @@ def uploadApp(cocaine_conf, manifest, profile, archive_file, app_name):
                            "-p", archive_file, "-n", app_name, "app:upload"])
   tester_base.execCommand(["cocaine-tool", "-c", cocaine_conf, "-m", profile, 
                           "-n", app_name, "profile:upload"])
+
+class DaemonDealer:
+  def __init__(self, messenger):
+    self.reader = messenger.makefile("r", bufsize = 0)
+    self.writer = messenger.makefile("w", bufsize = 0)
+    
+    self.process = paral.Process(["dnet_ioserv",
+                                  "-c",
+                                  os.path.join(tester_base.files_on_node, node_config.elliptics_conf)])
+    # container for result of tasks. must be mutable object.
+    self.result = [None]
+    # possible values of the result
+    self.DAEMON_FAILED = 1
+    self.SUCCESSFUL_TEST = 2
+    # lock for access to self.result
+    self.lock = threading.Lock()
+    self.tasks = paral.MultiTaskPerformer([self.monitorDaemon, self.testElliptics])
+  
+  def performTest(self):
+    self.tasks.start()
+    self.tasks.joinAll()
+    self.process.wait()
+  
+  def monitorDaemon(self):
+    log_prefix = "monitorDaemon: "
+    
+    tester_base.log("Starting elliptics daemon...", log_prefix)
+    self.process.start()
+    self.process.wait()
+    
+    with self.lock:
+      tester_base.log("Daemon stoped.", log_prefix)
+      if self.result[0] is None:
+        self.result[0] = self.DAEMON_FAILED
+
+  def testElliptics(self):
+    log_prefix = "testElliptics: "
+    
+    try:
+      tester_base.log("Waiting 5 seconds for starting of the daemon...", log_prefix)
+      time.sleep(5)
+      
+      if self.process.poll() is not None:
+        return
+      
+      tester_base.log("Elliptics is ready.", log_prefix)
+      
+      tester_base.writeLine("msg:daemon_prepared", f = self.writer)
+      
+      # event loop
+      while self.process.poll() is None:
+        line = tester_base.readLine(f = self.reader)
+        
+        if line == "msg:upload_app":
+          buildTestApp()
+          uploadTestApp()
+          tester_base.writeLine("msg:application_uploaded", f = self.writer)
+          
+        elif len(line) == 0 or line == "msg:tests_finished":
+          tester_base.log("Stopping node tester...")
+          break
+        
+      else:
+        return
+    
+      with self.lock:
+        if self.process.poll() is None and self.result[0] is None:
+          self.result[0] = self.SUCCESSFUL_TEST
+      
+    finally:
+      if self.process.poll() is None:
+        tester_base.log("Killing the daemon...", log_prefix)
+        self.process.kill()
 
 def uploadTestApp():
   old_cwd = os.getcwd()
@@ -45,73 +116,20 @@ def uploadTestApp():
             "test-app-second")
   
   os.chdir(old_cwd)
-
-DAEMON_FAILED = 1
-SUCCESSFUL_TEST = 2
-
-# result is list with one item
-# if result[0] is None then function must write into result[0] self unique id
-def runElliptics(lock, process, result):
-  log_prefix = "runElliptics: "
   
-  tester_base.log("Starting elliptics daemon...", log_prefix)
-  process.start()
-  process.wait()
+def performTest(socket):
+  # install packages
+  tester_base.execCommand(["sudo", os.path.join(node_config.working_dir, "common/installer.py")] +
+                          [p if v is None else p + "=" + v for p, v in node_config.packages])
   
-  with lock:
-    tester_base.log("Daemon stoped", log_prefix)
-    
-    if result[0] is None:
-      result[0] = DAEMON_FAILED
-
-def testElliptics(lock, process, result):
-  log_prefix = "testElliptics: "
+  tester = DaemonDealer(socket)
+  tester.performTest()
+  tester_base.log("Test is finished.")
   
-  try:
-    tester_base.log("Waiting 5 seconds for starting of daemon...", log_prefix)
-    time.sleep(5)
-    
-    if process.poll() is not None:
-      return
-    
-    tester_base.log("Elliptics is ready", log_prefix)
-    tester_base.writeLine("__msg__:node_tester:daemon_prepared")
-    
-    if node_config.deploy_test:
-      tester_base.log("Waiting for other daemons before uploading of test application...", log_prefix)
-      
-      while process.poll():
-        line = tester_base.readLine()
-        if line == "__msg__:tester:daemons_ready":
-          break
-        elif line == "__msg__:tester:tests_finished":
-          tester_base.error("Error has occurred on main node or on one of elliptics nodes. Test is aborted.")
-      
-      tester_base.log("Deploing test application...", log_prefix)
-      uploadTestApp()
-    
-    tester_base.writeLine("__msg__:node_tester:application_uploaded")
-    
-    while tester_base.readLine() != "__msg__:tester:tests_finished":
-      pass
-  
-    with lock:
-      if process.poll() is None and result[0] is None:
-        result[0] = SUCCESSFUL_TEST
-  finally:
-    if process.poll() is None:
-      tester_base.log("Killing daemon...", log_prefix)
-      process.kill()
-
-def installPackages():
-  args = []
-  for p, v in node_config.packages:
-    if v is None:
-      args.append(p)
-    else:
-      args.append(p + "=" + v)
-  
-  tester_base.execCommand(["sudo", os.path.join(node_config.working_dir, "common/installer.py")] + args)
+  if tester.result[0] == tester.DAEMON_FAILED:
+    tester_base.log("Daemon failed.")
+  elif tester.result[0] != tester.SUCCESSFUL_TEST:
+    tester_base.error("Unexpected result of testing. Something is wrong.")
 
 def processArgs():
   parser = optparse.OptionParser(usage = "Usage: %prog [options] packages")
@@ -132,34 +150,21 @@ def processArgs():
 def main():
   processArgs()
   os.chdir(node_config.working_dir)
-
-  installPackages()
   
-  if node_config.deploy_test:
-    buildTestApp()
+  tester_base.log("Tester will be listening on " + str(node_config.port) + " port.")
+  s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  s.bind(("", node_config.port))
   
-  tester_base.execCommand(["killall", "dnet_ioserv"], raise_on_error = False)
+  tester_base.log("Waiting for connection from main tester...")
+  s.listen(1)
+  messenger, addr = s.accept()
+  tester_base.log("Connection from " + str(addr) + " accepted.")
   
-  # run elliptics and test it
-  p = paral.Process(["dnet_ioserv", "-c", os.path.join(tester_base.files_on_node, node_config.elliptics_conf)])
-  result = [None]
+  try:
+    performTest(messenger)
+  finally:
+    messenger.close()
   
-  lock = threading.Lock()
-  perf = paral.MultiTaskPerformer([runElliptics, testElliptics], (lock, p, result))
-
-  # wait random time before starting because it's better if daemons will start in different moments
-  time.sleep(random.randint(0, 10))
-  
-  perf.start()
-  perf.joinAll()
-  p.wait()
-
-  tester_base.log("Test is finished")
-  if result[0] == DAEMON_FAILED:
-    tester_base.log("Daemon failed")
-  elif result[0] != SUCCESSFUL_TEST:
-    tester_base.error("Unexpected result of testing. Something is wrong.")
-
 #########################################################################
 if __name__ == "__main__":
   main()
