@@ -22,7 +22,6 @@ def writeLine(string, f = None):
 
 def log(message, prefix = ""):
   writeLine(prefix + message)
-  #writeLine("log:" + prefix + message)
 
 def error(message, prefix = "" , exception = TesterException):
   log(message, prefix = prefix + "error: ")

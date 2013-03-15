@@ -3,6 +3,7 @@
 # general parameters
 working_dir = "/home/bugsbunny/grape-tester-node/"
 
+# packages to install on nodes
 packages = [
 #           ("package", "version" or None for default version)
             ("elliptics-client", "2.21.4.3"),

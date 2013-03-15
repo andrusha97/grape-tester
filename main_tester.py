@@ -4,25 +4,35 @@
 from common import tester_base, installer, paral
 import ssh
 import main_config, node_config
-import os, sys, shutil, threading, subprocess, time, optparse, re, signal, socket
+import os, sys, shutil, threading, subprocess, time, optparse, re, socket
 
 class NodeDealer:
   def __init__(self, node, first_node = False):
     self.node = node
-    self.process = paral.Process(["ssh"] +
-                                 ([] if main_config.ssh_key is None else ["-i", main_config.ssh_key]) +
-                                 [main_config.ssh_user + "@" + node,
-                                  "'%s'%s" % (os.path.join(node_config.working_dir, "node_tester.py"),
-                                              " --deploy-test" if first_node else "")],
-                                 stdin = subprocess.PIPE,
-                                 stdout = subprocess.PIPE,
-                                 stderr = subprocess.STDOUT)
     
     if first_node:
       self.logger = threading.Thread(target = self.log)
       self.logger.daemon = True
+      
+      userhost = main_config.ssh_user + "@" + node
+      key = [] if main_config.ssh_key is None else ["-i", main_config.ssh_key]
+      tester_cmd = "'%s' --deploy-test" % os.path.join(node_config.working_dir, "node_tester.py")
+      
+      self.process = paral.Process(["ssh"] + key + [userhost, tester_cmd],
+                                   stdin = subprocess.PIPE,
+                                   stdout = subprocess.PIPE,
+                                   stderr = subprocess.STDOUT)
     else:
       self.logger = None
+      
+      userhost = main_config.ssh_user + "@" + node
+      key = [] if main_config.ssh_key is None else ["-i", main_config.ssh_key]
+      tester_cmd = "'%s'" % os.path.join(node_config.working_dir, "node_tester.py")
+      
+      self.process = paral.Process(["ssh"] + key + [userhost, tester_cmd],
+                                   stdin = open("/dev/null", "r"),
+                                   stdout = open("/dev/null", "w"),
+                                   stderr = open("/dev/null", 'w'))
     
     self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     self.reader = None
@@ -237,8 +247,6 @@ def processArgs():
 
 def main():
   os.putenv("LC_ALL", "C.UTF-8")
-  #signal.signal(signal.SIGINT, signal.SIG_IGN)
-  
   processArgs()
   
   if len(main_config.nodes) == 0:
