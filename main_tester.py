@@ -7,10 +7,8 @@ import main_config, node_config
 import os, sys, shutil, threading, subprocess, time, optparse, re, signal, socket
 
 class NodeDealer:
-  def __init__(self, node, log_file, first_node = False):
+  def __init__(self, node, first_node = False):
     self.node = node
-    self.log_file = log_file
-    self.dublicate = first_node
     self.process = paral.Process(["ssh"] +
                                  ([] if main_config.ssh_key is None else ["-i", main_config.ssh_key]) +
                                  [main_config.ssh_user + "@" + node,
@@ -20,28 +18,28 @@ class NodeDealer:
                                  stdout = subprocess.PIPE,
                                  stderr = subprocess.STDOUT)
     
-    self.logger = threading.Thread(target = self.log)
-    self.logger.daemon = True
+    if first_node:
+      self.logger = threading.Thread(target = self.log)
+      self.logger.daemon = True
+    else:
+      self.logger = None
     
     self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     self.reader = None
     self.writer = None
   
-  def log(self):
-    log = open(self.log_file, "w", buffering = 0)
-    
+  def log(self):    
     while True:
       line = self.process.process.stdout.readline()
       if len(line) > 0:
-        tester_base.writeLine(line.rstrip("\n"), f = log)
-        if self.dublicate:
-          tester_base.log(line.rstrip("\n"), "node: ")
+        tester_base.log(line.rstrip("\n"), self.node + ": ")
       else:
         break;
   
   def start(self):
     self.process.start()
-    self.logger.start()
+    if self.logger is not None:
+      self.logger.start()
     
     address = (self.node, node_config.port)
     
@@ -69,13 +67,15 @@ class NodeDealer:
     tester_base.writeLine(line, f = self.writer)
   
   def finish(self):
+    self.writer.close()
+    self.reader.close()
     self.socket.close()
   
   def wait(self):
     if self.process.isStarted():
       self.process.wait()
-    
-    self.logger.join()
+    if self.logger is not None:
+      self.logger.join()
         
 def testApplication():
   log_prefix = "testApplication: "
@@ -98,10 +98,7 @@ def testApplication():
 def testElliptics():
   log_prefix = "testElliptics: "
   
-  dealers = [NodeDealer(node,
-                        os.path.join(main_config.nodes_dir, str(num), "tester.log"),
-                        first_node = (num == 0))
-             for num, node in enumerate(main_config.nodes)]
+  dealers = [NodeDealer(node, first_node = (num == 0)) for num, node in enumerate(main_config.nodes)]
   
   try:
     tester_base.log("Starting testers on nodes...", log_prefix)
@@ -202,6 +199,8 @@ def downloadFilesFromNodes():
     
     dealer.copyFrom(os.path.join(node_config.working_dir, tester_base.files_on_node),
                     os.path.join(main_config.nodes_dir, str(num)))
+    dealer.copyFrom(os.path.join(node_config.working_dir, "tester.log"),
+                    os.path.join(main_config.nodes_dir, str(num)))
 
 def installPackages():
   tester_base.execCommand(["sudo", os.path.join(tester_base.script_dir, "common/installer.py")] +
@@ -238,7 +237,7 @@ def processArgs():
 
 def main():
   os.putenv("LC_ALL", "C.UTF-8")
-  signal.signal(signal.SIGINT, signal.SIG_IGN)
+  #signal.signal(signal.SIGINT, signal.SIG_IGN)
   
   processArgs()
   
@@ -248,8 +247,10 @@ def main():
   
   # duplicate stdout and stderr to log
   tee = subprocess.Popen(["tee", main_config.log_file], stdin=subprocess.PIPE)
-  sys.stdout = tee.stdin
-  sys.stderr = tee.stdin
+  os.dup2(tee.stdin.fileno(), sys.stdout.fileno())
+  os.dup2(tee.stdin.fileno(), sys.stderr.fileno())
+#  sys.stdout = tee.stdin
+#  sys.stderr = tee.stdin
   
   if main_config.killold:
     for node in main_config.nodes:

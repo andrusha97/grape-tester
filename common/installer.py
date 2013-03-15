@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # encoding: utf-8
 
-import sys, apt, tester_base, optparse
+import sys, apt, tester_base, optparse, signal
 
 # packages is list of pairs (package: str, version: str)
 # if version is None then default candidate will be installed
@@ -29,6 +29,8 @@ def installPackages(packages):
     tester_base.error(repr(e), log_prefix)
 
 if __name__ == '__main__':
+  signal.signal(signal.SIGINT, signal.SIG_IGN)
+  
   packages = []
   
   parser = optparse.OptionParser(usage = "Usage: %prog [options] packages")

@@ -11,18 +11,6 @@ files_on_node = "files/"
 class TesterException(Exception): pass
 class ExecException(TesterException): pass
 
-def readLine(f = None):
-  if f is None:
-    f2 = sys.stdin
-  else:
-    f2 = f
-    
-  s = f2.readline()
-  if len(s) > 0 and s[-1] == "\n":
-    return s[:-1]
-  else:
-    return s
-
 def writeLine(string, f = None):
   if f is None:
     f2 = sys.stdout

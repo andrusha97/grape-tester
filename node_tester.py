@@ -48,6 +48,8 @@ class DaemonDealer:
     self.tasks.start()
     self.tasks.joinAll()
     self.process.wait()
+    self.reader.close()
+    self.writer.close()
   
   def monitorDaemon(self):
     log_prefix = "monitorDaemon: "
@@ -77,14 +79,14 @@ class DaemonDealer:
       
       # event loop
       while self.process.poll() is None:
-        line = tester_base.readLine(f = self.reader)
+        line = self.reader.readline()
         
-        if line == "msg:upload_app":
+        if line.rstrip("\n") == "msg:upload_app":
           buildTestApp()
           uploadTestApp()
           tester_base.writeLine("msg:application_uploaded", f = self.writer)
           
-        elif len(line) == 0 or line == "msg:tests_finished":
+        elif len(line) == 0 or line.rstrip("\n") == "msg:tests_finished":
           tester_base.log("Stopping node tester...")
           break
         
@@ -150,6 +152,13 @@ def processArgs():
 def main():
   processArgs()
   os.chdir(node_config.working_dir)
+  
+  signal.signal(signal.SIGINT, signal.SIG_IGN)
+  
+  # duplicate stdout and stderr to log
+  tee = subprocess.Popen(["tee", "tester.log"], stdin=subprocess.PIPE)
+  os.dup2(tee.stdin.fileno(), sys.stdout.fileno())
+  os.dup2(tee.stdin.fileno(), sys.stderr.fileno())
   
   tester_base.log("Tester will be listening on " + str(node_config.port) + " port.")
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
