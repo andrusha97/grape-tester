@@ -112,7 +112,7 @@ def testElliptics():
   
   try:
     tester_base.log("Starting testers on nodes...", log_prefix)
-    for d in dealers:
+    for d in reversed(dealers):
       d.start()
       
     tester_base.log("Waiting for testers on nodes...", log_prefix)

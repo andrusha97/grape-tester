@@ -87,7 +87,6 @@ class DaemonDealer:
           tester_base.writeLine("msg:application_uploaded", f = self.writer)
           
         elif len(line) == 0 or line.rstrip("\n") == "msg:tests_finished":
-          tester_base.log("Stopping node tester...")
           break
         
       else:
