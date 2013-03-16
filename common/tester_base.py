@@ -1,6 +1,6 @@
 # encoding: utf-8
 
-import subprocess, sys, os
+import subprocess, sys, os, logging
 
 script_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
 if script_dir[-1] != "/":
@@ -11,20 +11,8 @@ files_on_node = "files/"
 class TesterException(Exception): pass
 class ExecException(TesterException): pass
 
-def writeLine(string, f = None):
-  if f is None:
-    f2 = sys.stdout
-  else:
-    f2 = f
-    
-  f2.write(string + "\n")
-  f2.flush()
-
-def log(message, prefix = ""):
-  writeLine(prefix + message)
-
-def error(message, prefix = "" , exception = TesterException):
-  log(message, prefix = prefix + "error: ")
+def error(message, logger = logging.getLogger(), exception = TesterException):
+  logger.error("error: " + message)
   raise exception(message)
 
 def execCommand(cmd, raise_on_error = True, **args):
@@ -36,7 +24,12 @@ def execCommand(cmd, raise_on_error = True, **args):
   else:
     return rcode
 
-def bindOutputToLog(log_file):
-  tee = subprocess.Popen(["tee", log_file], stdin=subprocess.PIPE)
+def bindOutputToFile(file):
+  sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+  tee = subprocess.Popen(["tee", file], stdin=subprocess.PIPE)
   os.dup2(tee.stdin.fileno(), sys.stdout.fileno())
   os.dup2(tee.stdin.fileno(), sys.stderr.fileno())
+
+def setupLogging(log_file):
+  logging.basicConfig(level = logging.INFO, format = "%(message)s")
+  bindOutputToFile(log_file)

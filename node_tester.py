@@ -3,24 +3,20 @@
 
 from common import tester_base, paral
 import node_config
-import time, os, threading, optparse, signal, socket
+import time, os, threading, optparse, signal, socket, logging
 
 def buildTestApp():
-  log_prefix = "buildTestApp: "
-
   old_cwd = os.getcwd()
   os.chdir(os.path.join(tester_base.files_on_node, node_config.build_dir))
   
-  tester_base.log("Building test grape application...", log_prefix)
+  logging.info("Building test grape application...")
   
   tester_base.execCommand(["make"])
 
   os.chdir(old_cwd)
 
 def uploadApp(cocaine_conf, manifest, profile, archive_file, app_name):
-  log_prefix = "uploadApp: "
-
-  tester_base.log("Uploading application " + app_name + "...", log_prefix)
+  logging.info("Uploading application '%s'..." % app_name)
     
   tester_base.execCommand(["cocaine-tool", "-c", cocaine_conf, "-m", manifest, 
                            "-p", archive_file, "-n", app_name, "app:upload"])
@@ -80,28 +76,24 @@ class DaemonDealer:
         self.result[0] = val
   
   def monitorDaemon(self):
-    log_prefix = "monitorDaemon: "
-    
-    tester_base.log("Starting elliptics daemon...", log_prefix)
+    logging.info("monitorDaemon: Starting elliptics daemon...")
     self.process.start()
     self.process.wait()
     
     self.resultOfTask(self.DAEMON_FAILED)
-    tester_base.log("Daemon stoped.", log_prefix)
+    logging.info("monitorDaemon: Daemon stoped.")
 
   def testElliptics(self):
-    log_prefix = "testElliptics: "
-    
     try:
-      tester_base.log("Waiting 10 seconds for starting of the daemon...", log_prefix)
+      logging.info("Waiting 10 seconds for starting of the daemon...")
       time.sleep(10)
       
       if not self.isRunning():
         return
       
-      tester_base.log("Elliptics is ready.", log_prefix)
+      logging.info("Elliptics is ready.")
       
-      tester_base.writeLine("msg:daemon_prepared", f = self.writer)
+      print >> self.writer, "msg:daemon_prepared"
       
       # event loop
       while self.isRunning():
@@ -110,7 +102,7 @@ class DaemonDealer:
         if line.rstrip("\n") == "msg:upload_app":
           buildTestApp()
           uploadTestApp()
-          tester_base.writeLine("msg:application_uploaded", f = self.writer)
+          print >> self.writer, "msg:application_uploaded"
         elif len(line) == 0:
           break
       else:
@@ -119,7 +111,7 @@ class DaemonDealer:
       self.resultOfTask(self.SUCCESSFUL_TEST)
     finally:
       if self.isRunning():
-        tester_base.log("Killing the daemon...", log_prefix)
+        logging.info("Killing the daemon...")
         self.process.kill()
 
 def installPackages():
@@ -131,10 +123,10 @@ def performTest(socket):
   
   tester = DaemonDealer(socket)
   tester.performTest()
-  tester_base.log("Test is finished.")
+  logging.info("Test is finished.")
   
   if tester.result[0] == tester.DAEMON_FAILED:
-    tester_base.log("Daemon failed.")
+    logging.info("Daemon failed.")
   elif tester.result[0] != tester.SUCCESSFUL_TEST:
     tester_base.error("Unexpected result of testing. Something is wrong.")
 
@@ -148,23 +140,23 @@ def processArgs():
   node_config.deploy_test = options.deploy_test
 
 def main():
+  signal.signal(signal.SIGINT, signal.SIG_IGN)
   processArgs()
   os.chdir(node_config.working_dir)
-  signal.signal(signal.SIGINT, signal.SIG_IGN)
   
-  tester_base.bindOutputToLog("tester.log")
+  tester_base.setupLogging("tester.log")
   
   # wait for connection from main node
-  tester_base.log("Tester will be listening on " + str(node_config.port) + " port.")
+  logging.info("Tester will be listening on " + str(node_config.port) + " port.")
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   s.bind(("", node_config.port))
   s.listen(1)
   
-  tester_base.log("Waiting for connection from main tester...")
+  logging.info("Waiting for connection from main tester...")
   s.settimeout(15)
   messenger, addr = s.accept()
   messenger.settimeout(None)
-  tester_base.log("Connection from " + str(addr) + " accepted.")
+  logging.info("Connection from " + str(addr) + " accepted.")
   
   try:
     performTest(messenger)

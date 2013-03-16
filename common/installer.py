@@ -1,19 +1,17 @@
 #!/usr/bin/python
 # encoding: utf-8
 
-import sys, apt, tester_base, optparse, signal
+import sys, apt, tester_base, optparse, signal, logging
 
 # packages is list of pairs (package: str, version: str)
 # if version is None then default candidate will be installed
 def installPackages(packages):
-  log_prefix = "installPackages: "
-  tester_base.log("Following packages will be installed: " + \
-                   ", ".join([p + "=" + str(v) for p, v in packages]), 
-                   log_prefix)
+  logging.info("Following packages will be installed: " +
+              ", ".join([p + "=" + str(v) for p, v in packages]))
 
   c = apt.Cache()
   try:
-    tester_base.log("Updating the cache...", log_prefix)
+    logging.info("Updating the cache...")
     c.update(raise_on_error = False)
     c.open()
     for pack, ver in packages:
@@ -22,19 +20,20 @@ def installPackages(packages):
         p.candidate = p.versions[ver]
       p.mark_install()
     
-    tester_base.log("Commit changes...", log_prefix)
+    logging.info("Commit changes...")
     if not c.commit():
-      tester_base.error("Unable to commit changes", log_prefix)
+      tester_base.error("Unable to commit changes")
   except KeyError as e:
-    tester_base.error(repr(e), log_prefix)
+    tester_base.error(repr(e))
 
 if __name__ == '__main__':
   signal.signal(signal.SIGINT, signal.SIG_IGN)
-  
-  packages = []
+  logging.basicConfig(level = logging.INFO, format = "installer: %(message)s")
   
   parser = optparse.OptionParser(usage = "Usage: %prog [options] packages")
   (options, args) = parser.parse_args()
+  
+  packages = []
   
   for p in args:
     parts = p.split('=')

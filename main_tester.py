@@ -4,7 +4,7 @@
 from common import tester_base, installer, paral
 import ssh
 import main_config, node_config
-import os, shutil, threading, subprocess, time, optparse, re, socket
+import os, shutil, threading, subprocess, time, optparse, re, socket, logging
 
 class NodeDealer:
   def __init__(self, node, first_node = False):
@@ -39,11 +39,11 @@ class NodeDealer:
                                    stdout = open("/dev/null", "w"),
                                    stderr = open("/dev/null", 'w'))
   
-  def log(self):    
+  def log(self):
     while True:
       line = self.process.process.stdout.readline()
       if len(line) > 0:
-        tester_base.log(line.rstrip("\n"), self.node + ": ")
+        logging.info(self.node + ": " + line.rstrip("\n"))
       else:
         break;
   
@@ -58,7 +58,7 @@ class NodeDealer:
     self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     address = (self.node, node_config.port)
     
-    tester_base.log("Connecting to node %s:%d..." % address, "NodeDealer: ")
+    logging.info("Connecting to node %s:%d..." % address)
     for x in xrange(3):
       try:
         self.socket.connect(address)
@@ -67,7 +67,7 @@ class NodeDealer:
         pass
       time.sleep(3)
     else:
-      tester_base.error("Can't establish connection to node %s:%d..." % address, "NodeDealer: ")
+      tester_base.error("Can't establish connection to node %s:%d..." % address)
       
     self.reader = self.socket.makefile("r", bufsize = 0)
     self.writer = self.socket.makefile("w", bufsize = 0)
@@ -82,7 +82,7 @@ class NodeDealer:
   
   def writeLine(self, line):
     if self.connection_state == "connected":
-      tester_base.writeLine(line, f = self.writer)
+      print >> self.writer, line
   
   def finish(self):
     if self.connection_state == "connected":
@@ -98,9 +98,7 @@ class NodeDealer:
       self.logger.join()
         
 def testApplication():
-  log_prefix = "testApplication: "
-  
-  tester_base.log("Launching test application...", log_prefix)
+  logging.info("Launching test application...")
   
   tester_base.execCommand(("dnet_ioclient -r " + main_config.nodes[0] + ":1025:2 -g2 -c test-app@start-task").split())
   tester_base.execCommand(("dnet_ioclient -r " + main_config.nodes[0] + ":1025:2 -g2 -c test-app-second@start-task").split())
@@ -113,41 +111,41 @@ def testApplication():
   if output != "xxx123test-app-second@event0|test-app-second@event1|test-app-second@event2|test-app-second@finish|":
     tester_base.error("dnet_ioclient returned string '" + output + "'. Something is wrong.", log_prefix)
   else:
-    tester_base.log("Test has been successfully completed.", log_prefix)
+    logging.info("Test has been successfully completed.")
 
 def testElliptics():
-  log_prefix = "testElliptics: "
-  
-  dealers = [NodeDealer(node, first_node = (num == 0)) for num, node in enumerate(main_config.nodes)]
+  dealers = [NodeDealer(node, first_node = (num == 0))
+             for num, node in enumerate(main_config.nodes)]
   
   try:
-    tester_base.log("Starting testers on nodes...", log_prefix)
+    logging.info("Starting testers on nodes...")
     for d in reversed(dealers):
       d.start()
       
-    tester_base.log("Waiting for testers on nodes...", log_prefix)
+    logging.info("Waiting for testers on nodes...")
     
     fail = [n for n, d in enumerate(dealers) if d.readLine() != "msg:daemon_prepared"]
     
     if len(fail) == 0:
-      tester_base.log("Waiting 5 seconds after starting of daemons...", log_prefix)
+      logging.info("Waiting 5 seconds after starting of daemons...")
       time.sleep(5)
       
       dealers[0].writeLine("msg:upload_app")
       
       if dealers[0].readLine() != "msg:application_uploaded":
-        tester_base.error("Application has not been uploaded.", log_prefix)
+        tester_base.error("Application has not been uploaded.")
       
-      tester_base.log("Waiting 5 seconds after uploading of application...", log_prefix)
+      logging.info("Waiting 5 seconds after uploading of application...")
       time.sleep(5)
       
       testApplication()
         
     else:
-      tester_base.error("Following node testers finished with error: " + ', '.join([str(n) for n in fail]), log_prefix)
+      tester_base.error("Following node testers finished with error: " +
+                        ', '.join([str(n) for n in fail]))
       
   finally:
-    tester_base.log("Stopping testers on nodes...", log_prefix)
+    logging.info("Stopping testers on nodes...")
     for d in dealers:
       d.finish()
     for d in dealers:
@@ -169,8 +167,7 @@ def preprocessDirectory(dir, env):
       os.remove(file)
 
 def prepareFilesForNodes():
-  log_prefix = "prepareFilesForNodes: "
-  tester_base.log("Preparing tester for uploading to nodes...", log_prefix)
+  logging.info("Preparing tester for uploading to nodes...")
   
   shutil.rmtree(main_config.nodes_dir, ignore_errors = True)
   
@@ -179,7 +176,8 @@ def prepareFilesForNodes():
     for_deploy = os.path.join(main_config.nodes_dir, str(dname), "to_deploy/")
     os.makedirs(for_deploy)
     
-    shutil.copytree(main_config.node_files, os.path.join(for_deploy, tester_base.files_on_node))
+    shutil.copytree(main_config.node_files,
+                    os.path.join(for_deploy, tester_base.files_on_node))
     
     preprocessDirectory(os.path.join(for_deploy, tester_base.files_on_node),
                         {
@@ -188,14 +186,15 @@ def prepareFilesForNodes():
                           "node": node
                         })
     
-    shutil.copytree(os.path.join(tester_base.script_dir, "common/"), os.path.join(for_deploy, "common/"))
+    shutil.copytree(os.path.join(tester_base.script_dir, "common/"),
+                    os.path.join(for_deploy, "common/"))
     shutil.copy(os.path.join(tester_base.script_dir, "node_config.py"), for_deploy)
     shutil.copy(os.path.join(tester_base.script_dir, "node_tester.py"), for_deploy)
     
-    tester_base.log("Node tester has been written to " + for_deploy, log_prefix)
+    logging.info("Node tester has been written to '%s'." % for_deploy)
 
 def uploadTesterToNodes():
-  tester_base.log("Uploading tester to nodes...", "uploadTesterToNodes: ")
+  logging.info("Uploading tester to nodes...")
   
   for num, node in enumerate(main_config.nodes):
     dealer = ssh.SSHDealer(main_config.ssh_user, node, main_config.ssh_key)
@@ -207,8 +206,7 @@ def uploadTesterToNodes():
     dealer.execute("chmod +x '%s'" % os.path.join(node_config.working_dir, "node_tester.py"))
 
 def downloadFilesFromNodes():
-  log_prefix = "downloadFilesFromNodes: "
-  tester_base.log("Downloading working directories (with logs, configs, etc) from nodes...", log_prefix)
+  logging.info("Downloading working directories (with logs, configs, etc) from nodes...")
   
   for num, node in enumerate(main_config.nodes):
     dealer = ssh.SSHDealer(main_config.ssh_user, node, main_config.ssh_key)
@@ -233,13 +231,14 @@ def performTest():
     testElliptics()
   finally:
     downloadFilesFromNodes()
-    tester_base.log("You can find files from nodes in '" +
-                    os.path.join(main_config.nodes_dir, "{0, 1, ...}", tester_base.files_on_node) + "', " +
-                    "logs of node testers in '" +
-                    os.path.join(main_config.nodes_dir, "{0, 1, ...}", "tester.log") + "', " +
-                    "log of this script in '" + main_config.log_file + "'.")
+    logging.info("You can find files from nodes in '%s', "
+                 "logs of node testers in '%s', "
+                 "log of this script in '%s'." %
+                 (os.path.join(main_config.nodes_dir, "{0, 1, ...}", tester_base.files_on_node),
+                  os.path.join(main_config.nodes_dir, "{0, 1, ...}", "tester.log"),
+                  main_config.log_file))
   
-  tester_base.log("Success!")
+  logging.info("Success!")
 
 def killOldTesters():
   for node in main_config.nodes:
@@ -265,9 +264,9 @@ def main():
   processArgs()
   
   if len(main_config.nodes) == 0:
-    tester_base.log("List of nodes in main_config.py is empty.")
+    print "List of nodes in main_config.py is empty."
   else:
-    tester_base.bindOutputToLog(main_config.log_file)
+    tester_base.setupLogging(main_config.log_file)
     if main_config.killold:
       killOldTesters()
     performTest()
