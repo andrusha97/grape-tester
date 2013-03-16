@@ -72,11 +72,10 @@ class NodeDealer:
   def monitorTester_(self, stdout):
     while True:
       line = stdout.readline()
-      if len(line) > 0:
-        if self.show_log:
-          logging.info(self.node + ": " + line.rstrip("\n"))
-      else:
-        break;
+      if len(line) == 0:
+        break
+      elif self.show_log:
+        logging.info(self.node + ": " + line.rstrip("\n"))
   
   def messengerState(self):
     if self.messenger is None:
@@ -177,6 +176,33 @@ def testApplication():
   else:
     logging.info("Test has been successfully completed.")
 
+def testElliptics(dealers):  
+  logging.info("Run elliptics daemons. It may take some time (about 10 seconds per node).")
+  for d in dealers:
+    d.execCommand("msg:run_elliptics")
+  
+  logging.info("Uploading test application...")
+  dealers[0].execCommand("msg:upload_app")
+  
+  testApplication()
+  
+  for d in dealers:
+    d.writeMessage("msg:check_daemon")
+    if d.readMessage() != "msg:works":
+      tester_base.error("Elliptics daemon unexpectedly finished on node %s. "
+                        "Try to see on logs in '%s' to investigate the problem." %
+                        (d.node, os.path.join(main_config.nodes_dir, str(d.id))))
+  
+  logging.info("Waiting for finishing of elliptics daemons...")
+  for d in dealers:
+    d.execCommand("msg:kill_daemon")
+  
+  for d in dealers:
+    d.execCommand("msg:wait_daemon")
+    
+  for d in dealers:
+    d.writeMessage("msg:bye")  
+
 def installPackages():
   tester_base.execCommand(["sudo", os.path.join(tester_base.script_dir, "common/installer.py")] +
                           [p if v is None else p + "=" + v for p, v in main_config.packages])
@@ -204,52 +230,30 @@ def performTest():
     for d in dealers:
       d.start()
     
-    for d in dealers:
-      d.execCommand("msg:install_packages")
-    
-    dealers[0].execCommand("msg:build_app")
-    
-    logging.info("Run elliptics daemons. It may take some time (about 10 seconds per node).")
-    for d in dealers:
-      d.execCommand("msg:run_elliptics")
-    
-    logging.info("Uploading test application...")
-    dealers[0].execCommand("msg:upload_app")
-    
-    testApplication()
-    
-    for d in dealers:
-      d.writeMessage("msg:check_daemon")
-      if d.readMessage() != "msg:works":
-        tester_base.error("Elliptics daemon unexpectedly finished on node %s. "
-                          "Try to see on logs in '%s' to investigate the problem." %
-                          (d.node, os.path.join(main_config.nodes_dir, str(d.id))))
-    
-    logging.info("Waiting for finishing of elliptics daemons...")
-    for d in dealers:
-      d.execCommand("msg:kill_daemon")
-    
-    for d in dealers:
-      d.execCommand("msg:wait_daemon")
+    try:
+      for d in dealers:
+        d.execCommand("msg:install_packages")
       
-    for d in dealers:
-      d.writeMessage("msg:bye")
+      dealers[0].execCommand("msg:build_app")
+      
+      testElliptics(dealers)
+    finally:
+      logging.info("Downloading files (logs, configs, etc) from nodes. "
+                   "These files may help you if something was wrong.")
+      for d in dealers:
+        d.downloadFiles()
+      logging.info("You can find these files in '%s', "
+                   "logs of node testers in '%s', "
+                   "log of this script in '%s'." %
+                   (os.path.join(main_config.nodes_dir, "{0, 1, ...}", tester_base.files_on_node),
+                    os.path.join(main_config.nodes_dir, "{0, 1, ...}", "tester.log"),
+                    main_config.log_file))
   finally:
     logging.info("Waiting for finishing of node testers...")
     for d in dealers:
       d.finish()
     for d in dealers:
       d.wait()
-    logging.info("Downloading files (logs, configs, etc) from nodes. "
-                 "These files may help you if something was wrong.")
-    for d in dealers:
-      d.downloadFiles()
-    logging.info("You can find these files in '%s', "
-                 "logs of node testers in '%s', "
-                 "log of this script in '%s'." %
-                 (os.path.join(main_config.nodes_dir, "{0, 1, ...}", tester_base.files_on_node),
-                  os.path.join(main_config.nodes_dir, "{0, 1, ...}", "tester.log"),
-                  main_config.log_file))
   
   logging.info("Success!")
 
