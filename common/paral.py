@@ -1,19 +1,6 @@
 # encoding: utf-8
 
 import subprocess, threading
-
-class MultiTaskPerformer:
-  def __init__(self, tasks, args = ()):
-    self.threads = [threading.Thread(target = t, args = args)
-                    for t in tasks]
-                      
-  def start(self):
-    for t in self.threads:
-        t.start()
-  
-  def joinAll(self):
-    for t in self.threads:
-      t.join()
   
 class ProcessHandlingError(Exception): pass
   

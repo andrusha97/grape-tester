@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # encoding: utf-8
 
-import sys, apt, tester_base, optparse, signal, logging
+import apt, tester_base, optparse, signal, logging
 
 # packages is list of pairs (package: str, version: str)
 # if version is None then default candidate will be installed
