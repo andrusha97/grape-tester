@@ -79,4 +79,7 @@ class Messenger:
   
   def close(self):
     if self.state() == "active":
-      self.channel.close()
+      try:
+        self.channel.close()
+      except socket.error:
+        pass

@@ -35,5 +35,5 @@ def sftpRemove(sftp, file):
       for f in sftp.listdir(file):
         sftpRemove(sftp, os.path.join(file, f))
       sftp.rmdir(file)
-    elif stat.S_ISREG(attr.st_mode):
+    else:
       sftp.remove(file)

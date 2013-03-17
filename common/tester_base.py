@@ -18,9 +18,8 @@ def error(message, logger = logging.getLogger(), exception = TesterException):
 def execCommand(cmd, raise_on_error = True, **args):
   rcode = subprocess.call(cmd, **args)
   if rcode != 0 and raise_on_error:
-    error("Command has ended with code " + str(rcode) + ": " + " ".join(cmd), 
-          "execCommand: ", 
-          ExecException)
+    error("Command has ended with code " + str(rcode) + ": " + " ".join(cmd),
+          exception = ExecException)
   else:
     return rcode
 
