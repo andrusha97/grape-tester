@@ -32,4 +32,5 @@ def bindOutputToFile(file):
 
 def setupLogging(log_file):
   logging.basicConfig(level = logging.INFO, format = "%(message)s")
+  logging.getLogger("paramiko.transport").setLevel(logging.WARNING)
   bindOutputToFile(log_file)

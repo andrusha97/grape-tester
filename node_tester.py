@@ -8,7 +8,7 @@ import time, os, signal, socket, logging
 class NodeTester:
   def __init__(self, messenger):
     # for communication with main node
-    self.messenger = messenger
+    self.messenger = paral.Messenger(messenger)
     
     self.process = paral.Process(["dnet_ioserv",
                                   "-c",
@@ -78,51 +78,35 @@ class NodeTester:
     if self.process.isStarted():
       self.process.wait()
   
-  def readMessage(self):
-    try:
-      line = self.messenger.readline()
-      if len(line) > 0:
-        return line.rstrip("\n")
-    except socket.error:
-      pass
-      
-    return None
-  
-  def writeMessage(self, msg):
-    try:
-      print >> self.messenger, line
-    except socket.error:
-      pass
-  
   def run(self):
     try:
       while True:
-        message = self.readMessage()
+        message = self.messenger.read()
         logging.debug("Message received: " + str(message))
         
         if message == "msg:install_packages":
           self.installPackages()
-          print >> self.messenger, "msg:ok"
+          self.messenger.write("msg:ok")
         elif message == "msg:run_elliptics":
           self.startDaemon()
-          print >> self.messenger, "msg:ok"
+          self.messenger.write("msg:ok")
         elif message == "msg:build_app":
           self.buildTestApp()
-          print >> self.messenger, "msg:ok"
+          self.messenger.write("msg:ok")
         elif message == "msg:upload_app":
           self.uploadTestApp()
-          print >> self.messenger, "msg:ok"
+          self.messenger.write("msg:ok")
         elif message == "msg:check_daemon":
           if self.checkDaemon():
-            print >> self.messenger, "msg:works"
+            self.messenger.write("msg:works")
           else:
-            print >> self.messenger, "msg:does_not_works"
+            self.messenger.write("msg:does_not_works")
         elif message == "msg:wait_daemon":
           self.waitDaemon()
-          print >> self.messenger, "msg:ok"
+          self.messenger.write("msg:ok")
         elif message == "msg:kill_daemon":
           self.killDaemon()
-          print >> self.messenger, "msg:ok"
+          self.messenger.write("msg:ok")
         elif message == "msg:bye":
           logging.info("Main node has finished communication.")
           break

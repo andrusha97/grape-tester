@@ -1,6 +1,6 @@
 # encoding: utf-8
 
-import subprocess, threading
+import subprocess, threading, socket
   
 class ProcessHandlingError(Exception): pass
   
@@ -43,3 +43,40 @@ class Process:
   def terminate(self):
     if self.isStarted():
       return self.process.terminate()
+
+class Messenger:
+  def __init__(self, f = None):
+    self.channel = f
+  
+  def set(self, f):
+    self.channel = f
+  
+  def state(self):
+    if self.channel is None:
+      return "not connected"
+    elif self.channel.closed:
+      return "disconnected"
+    else:
+      return "active"
+  
+  def read(self):
+    if self.state() == "active":
+      try:
+        line = self.channel.readline()
+        if len(line) > 0:
+          return line.rstrip("\n")
+      except socket.error:
+        pass
+      
+    return None
+  
+  def write(self, msg):
+    if self.state() == "active":
+      try:
+        print >> self.channel, msg
+      except socket.error:
+        pass
+  
+  def close(self):
+    if self.state() == "active":
+      self.channel.close()

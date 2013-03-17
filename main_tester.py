@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # encoding: utf-8
 
-from common import tester_base, installer
+from common import tester_base, paral
 import ssh
 import main_config, node_config
 import os, shutil, threading, subprocess, time, optparse, re, socket, logging, paramiko
@@ -27,7 +27,7 @@ class NodeDealer:
     self.id = id
     self.show_log = show_log
     
-    self.messenger = None
+    self.messenger = paral.Messenger()
     self.monitor = None
     
     self.ssh_client = paramiko.SSHClient()
@@ -67,7 +67,7 @@ class NodeDealer:
     else:
       tester_base.error("Can't establish connection to node %s:%d..." % address)
       
-    self.messenger = s.makefile("w+", bufsize = 1)
+    self.messenger.set(s.makefile("w+", bufsize = 1))
   
   def monitorTester_(self, stdout):
     while True:
@@ -77,42 +77,43 @@ class NodeDealer:
       elif self.show_log:
         logging.info(self.node + ": " + line.rstrip("\n"))
   
-  def messengerState(self):
-    if self.messenger is None:
-      return "not connected"
-    elif self.messenger.closed:
-      return "closed"
-    else:
-      return "active"
-  
-  def readMessage(self):
-    if self.messengerState() == "active":
-      try:
-        line = self.messenger.readline()
-        if len(line) > 0:
-          return line.rstrip("\n")
-      except socket.error:
-        pass
-      
-    return None
-  
-  def writeMessage(self, line):
-    if self.messengerState() == "active":
-      try:
-        print >> self.messenger, line
-      except socket.error:
-        pass
-  
-  def execCommand(self, msg):
-    self.writeMessage(msg)
-    if self.readMessage() != "msg:ok":
+  def do(self, msg):
+    self.messenger.write(msg)
+    if self.messenger.read() != "msg:ok":
       tester_base.error("Error has occured on node %s. "
                         "Try to see on logs in '%s' to investigate the problem." %
                         (self.node, os.path.join(main_config.nodes_dir, str(self.id))))
   
+  def installPackages(self):
+    self.do("msg:install_packages")
+  
+  def buildApp(self):
+    self.do("msg:build_app")
+  
+  def uploadApp(self):
+    self.do("msg:upload_app")
+  
+  def runElliptics(self):
+    self.do("msg:run_elliptics")
+  
+  def checkDaemon(self):
+    self.messenger.write("msg:check_daemon")
+    if self.messenger.read() != "msg:works":
+      tester_base.error("Elliptics daemon unexpectedly finished on node %s. "
+                        "Try to see on logs in '%s' to investigate the problem." %
+                        (self.node, os.path.join(main_config.nodes_dir, str(self.id))))
+  
+  def killDaemon(self):
+    self.do("msg:kill_daemon")
+  
+  def waitDaemon(self):
+    self.do("msg:wait_daemon")
+  
+  def bye(self):
+    self.messenger.write("msg:bye")
+  
   def finish(self):
-    if self.messengerState() == "active":
-      self.messenger.close()
+    self.messenger.close()
   
   def prepareFiles(self):
     for_deploy = os.path.join(main_config.nodes_dir, str(self.id), "to_deploy/")
@@ -138,7 +139,7 @@ class NodeDealer:
   
   def uploadTester(self):
     for_deploy = os.path.join(main_config.nodes_dir, str(self.id), "to_deploy/")
-    ssh.sftpRemove(self.sftp_client, node_config.working_dir, ignore_errors = True)
+    ssh.sftpRemove(self.sftp_client, node_config.working_dir)
     ssh.sftpCopyToRemote(self.sftp_client, for_deploy, node_config.working_dir)
     self.sftp_client.chmod(os.path.join(node_config.working_dir, "node_tester.py"), 0755)
     self.sftp_client.chmod(os.path.join(node_config.working_dir, "common/installer.py"), 0755)
@@ -146,8 +147,7 @@ class NodeDealer:
   def downloadFiles(self):
     for f in main_config.remove_before_downloading:
       ssh.sftpRemove(self.sftp_client,
-                     os.path.join(node_config.working_dir, f),
-                     ignore_errors = True)
+                     os.path.join(node_config.working_dir, f))
     
     ssh.sftpCopyFromRemote(self.sftp_client,
                            os.path.join(node_config.working_dir, tester_base.files_on_node),
@@ -179,29 +179,22 @@ def testApplication():
 def testElliptics(dealers):  
   logging.info("Run elliptics daemons. It may take some time (about 10 seconds per node).")
   for d in dealers:
-    d.execCommand("msg:run_elliptics")
+    d.runElliptics()
   
   logging.info("Uploading test application...")
-  dealers[0].execCommand("msg:upload_app")
+  dealers[0].uploadApp()
   
   testApplication()
   
   for d in dealers:
-    d.writeMessage("msg:check_daemon")
-    if d.readMessage() != "msg:works":
-      tester_base.error("Elliptics daemon unexpectedly finished on node %s. "
-                        "Try to see on logs in '%s' to investigate the problem." %
-                        (d.node, os.path.join(main_config.nodes_dir, str(d.id))))
+    d.checkDaemon()
   
   logging.info("Waiting for finishing of elliptics daemons...")
   for d in dealers:
-    d.execCommand("msg:kill_daemon")
+    d.killDaemon()
   
   for d in dealers:
-    d.execCommand("msg:wait_daemon")
-    
-  for d in dealers:
-    d.writeMessage("msg:bye")  
+    d.waitDaemon()
 
 def installPackages():
   tester_base.execCommand(["sudo", os.path.join(tester_base.script_dir, "common/installer.py")] +
@@ -226,34 +219,36 @@ def performTest():
     d.uploadTester()
   
   try:
-    logging.info("Start testers on nodes nodes...")
+    logging.info("Start testers on nodes...")
     for d in dealers:
       d.start()
     
-    try:
-      for d in dealers:
-        d.execCommand("msg:install_packages")
-      
-      dealers[0].execCommand("msg:build_app")
-      
-      testElliptics(dealers)
-    finally:
-      logging.info("Downloading files (logs, configs, etc) from nodes. "
-                   "These files may help you if something was wrong.")
-      for d in dealers:
-        d.downloadFiles()
-      logging.info("You can find these files in '%s', "
-                   "logs of node testers in '%s', "
-                   "log of this script in '%s'." %
-                   (os.path.join(main_config.nodes_dir, "{0, 1, ...}", tester_base.files_on_node),
-                    os.path.join(main_config.nodes_dir, "{0, 1, ...}", "tester.log"),
-                    main_config.log_file))
+    for d in dealers:
+      d.installPackages()
+    
+    dealers[0].buildApp()
+    
+    testElliptics(dealers)
+  
+    for d in dealers:
+      d.bye()
   finally:
     logging.info("Waiting for finishing of node testers...")
     for d in dealers:
       d.finish()
     for d in dealers:
       d.wait()
+      
+    logging.info("Downloading files (logs, configs, etc) from nodes. "
+                 "These files may help you if something was wrong.")
+    for d in dealers:
+      d.downloadFiles()
+    logging.info("You can find these files in '%s', "
+                 "logs of node testers in '%s', "
+                 "log of this script in '%s'." %
+                 (os.path.join(main_config.nodes_dir, "{0, 1, ...}", tester_base.files_on_node),
+                  os.path.join(main_config.nodes_dir, "{0, 1, ...}", "tester.log"),
+                  main_config.log_file))
   
   logging.info("Success!")
 
