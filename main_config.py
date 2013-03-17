@@ -22,7 +22,7 @@ nodes_dir = "nodes/"
 # and then the directory will be copied to the node
 node_files = _os_.path.join(_script_dir_, "node_files/")
 
-# some files must be removed before coping of working directory from node (e.g. sockets)
+# some files must be removed before copying of working directory from node (e.g. sockets)
 remove_before_downloading = ["files/var/run/cocaine/engines/"]
 
 # user on nodes

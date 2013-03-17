@@ -98,8 +98,8 @@ class NodeDealer:
   
   def checkDaemon(self):
     self.messenger.write("msg:check_daemon")
-    if self.messenger.read() != "msg:works":
-      tester_base.error("Elliptics daemon unexpectedly finished on node %s. "
+    if self.messenger.read() != "msg:ok":
+      tester_base.error("Elliptics daemon has unexpectedly stopped on node %s. "
                         "Try to see on logs in '%s' to investigate the problem." %
                         (self.node, os.path.join(main_config.nodes_dir, str(self.id))))
   
@@ -189,7 +189,7 @@ def testElliptics(dealers):
   for d in dealers:
     d.checkDaemon()
   
-  logging.info("Waiting for finishing of elliptics daemons...")
+  logging.info("Waiting for elliptics daemons are stopped...")
   for d in dealers:
     d.killDaemon()
   
@@ -219,7 +219,7 @@ def performTest():
     d.uploadTester()
   
   try:
-    logging.info("Start testers on nodes...")
+    logging.info("Starting testers on nodes...")
     for d in dealers:
       d.start()
     
@@ -233,7 +233,7 @@ def performTest():
     for d in dealers:
       d.bye()
   finally:
-    logging.info("Waiting for finishing of node testers...")
+    logging.info("Waiting for node testers are stopped...")
     for d in dealers:
       d.finish()
     for d in dealers:

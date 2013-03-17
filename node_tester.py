@@ -65,7 +65,7 @@ class NodeTester:
     time.sleep(7)
     
     if not self.checkDaemon():
-      tester_base.error("Daemon is not running. Fail.")
+      tester_base.error("Daemon has failed to start.")
   
   def checkDaemon(self):
     return self.process.isStarted() and self.process.poll() is None
@@ -98,9 +98,9 @@ class NodeTester:
           self.messenger.write("msg:ok")
         elif message == "msg:check_daemon":
           if self.checkDaemon():
-            self.messenger.write("msg:works")
+            self.messenger.write("msg:ok")
           else:
-            self.messenger.write("msg:does_not_works")
+            self.messenger.write("msg:does_not_work")
         elif message == "msg:wait_daemon":
           self.waitDaemon()
           self.messenger.write("msg:ok")
@@ -143,7 +143,7 @@ def main():
     tester = NodeTester(messenger)
     tester.run()
   finally:
-    logging.info("Test is finished.")
+    logging.info("Test is completed.")
     messenger.close()
   
 #########################################################################
