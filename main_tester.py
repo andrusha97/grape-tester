@@ -225,7 +225,7 @@ def performTest():
     d.uploadTester()
   
   try:
-    logging.info("Starting testers on nodes...")
+    logging.info("Starting tester on nodes...")
     for d in dealers:
       d.start()
     
