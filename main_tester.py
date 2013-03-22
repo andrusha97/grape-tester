@@ -232,6 +232,7 @@ def performTest():
     logging.info("Installing packages on nodes. It may take some time.")
     for d in dealers:
       d.installPackages()
+      logging.info("Packages have been installed on node %s." % d.node)
     
     logging.info("Building test application... Logs of building will be available in %s." %
                  os.path.join(main_config.nodes_dir, "0", "tester.log"))
