@@ -60,12 +60,6 @@ class NodeTester:
   def startDaemon(self):
     logging.info("Starting elliptics daemon...")
     self.process.start()
-    
-    logging.info("Waiting 7 seconds for starting of the daemon...")
-    time.sleep(7)
-    
-    if not self.checkDaemon():
-      tester_base.error("Daemon has failed to start.")
   
   def checkDaemon(self):
     return self.process.isStarted() and self.process.poll() is None

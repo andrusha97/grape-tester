@@ -177,9 +177,15 @@ def testApplication():
     logging.info("Test has been successfully completed.")
 
 def testElliptics(dealers):  
-  logging.info("Run elliptics daemons. It may take some time (about 10 seconds per node).")
+  logging.info("Run elliptics daemons. It may take some time.")
   for d in dealers:
     d.runElliptics()
+    time.sleep(2)
+  
+  logging.info("Waiting 10 seconds for starting of elliptics daemons...")
+  time.sleep(10)
+  for d in dealers:
+    d.checkDaemon()
   
   logging.info("Uploading test application...")
   dealers[0].uploadApp()
@@ -202,7 +208,7 @@ def installPackages():
 def performTest():
   installPackages()
   
-  dealers = [NodeDealer(node, num, show_log = (num == 0))
+  dealers = [NodeDealer(node, num, show_log = False)
              for num, node in enumerate(main_config.nodes)]
   
   if main_config.killold:
@@ -223,9 +229,12 @@ def performTest():
     for d in dealers:
       d.start()
     
+    logging.info("Installing packages on nodes...")
     for d in dealers:
       d.installPackages()
     
+    logging.info("Building test application... Logs of building will be available in %s." %
+                 os.path.join(main_config.nodes_dir, "0", "tester.log"))
     dealers[0].buildApp()
     
     testElliptics(dealers)
