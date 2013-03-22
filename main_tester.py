@@ -177,7 +177,7 @@ def testApplication():
     logging.info("Test has been successfully completed.")
 
 def testElliptics(dealers):  
-  logging.info("Run elliptics daemons. It may take some time.")
+  logging.info("Run elliptics daemons.")
   for d in dealers:
     d.runElliptics()
     time.sleep(2)
@@ -229,7 +229,7 @@ def performTest():
     for d in dealers:
       d.start()
     
-    logging.info("Installing packages on nodes...")
+    logging.info("Installing packages on nodes. It may take some time.")
     for d in dealers:
       d.installPackages()
     
