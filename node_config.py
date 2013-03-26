@@ -3,6 +3,9 @@
 # general parameters
 working_dir = "/home/bugsbunny/grape-tester-node/"
 
+# port through which node tester will communicate with main tester
+port = 31337
+
 # packages to install on nodes
 packages = [
 #           ("package", "version" or None for default version)
@@ -26,13 +29,10 @@ cocaine_conf = "conf/cocaine.conf"
 # path to directory with test application in node_files/
 build_dir = "test_app/"
 
+# some files in build_dir
+# *.so and *.tar will be made by script
+# manifest and profile must be in the directory with configuration of nodes (in node_files/<build_dir>/)
 soname = "libetest.so"
 tar_name = "etest.tar"
 manifest = "manifest.json"
 profile = "profile.json"
-
-# port through which node tester will communicate with main tester
-port = 31337
-
-
-

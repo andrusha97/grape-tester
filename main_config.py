@@ -12,6 +12,7 @@ packages = [
             ("elliptics-client", "2.21.4.3")
             ]
 
+# log of main_tester.py
 log_file = "tester.log"
 
 # directory for files from nodes (e.g. logs)
